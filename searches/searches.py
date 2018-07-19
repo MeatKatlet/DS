@@ -148,7 +148,7 @@ def plot_heatmap(percentage_of_sucsess,title):
 
 
 
-df_sucsess_searches, all_searches = elastic.elastic_queries.run_logic(True)#надо сделать чтобы лидо запрос из бд, и результатом будет фрейм, который мы сохраняем в файл, либо считываем из файла фрейм
+all_searches,n = elastic.elastic_queries.run_logic(True)#надо сделать чтобы лидо запрос из бд, и результатом будет фрейм, который мы сохраняем в файл, либо считываем из файла фрейм
 #по каждому сочетанию сделать heatmap
 """
 география - бренды
@@ -191,7 +191,7 @@ plt.show()
 
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 f = elastic.elastic_queries.region_brand
-percentage_of_sucsess = elastic.elastic_queries.calc_percentage(all_searches, df_sucsess_searches,f)#регион-бренд
+percentage_of_sucsess = elastic.elastic_queries.calc_percentage(all_searches,f, n)#регион-бренд
 
 
 plot_heatmap(percentage_of_sucsess, '% удачных поисков. Регион vs Бренд')
@@ -199,14 +199,14 @@ plot_heatmap(percentage_of_sucsess, '% удачных поисков. Регио
 
 #++++++++++++++++++++++
 f = elastic.elastic_queries.region_group
-percentage_of_sucsess = elastic.elastic_queries.calc_percentage(all_searches, df_sucsess_searches, f)#регион-группа
+percentage_of_sucsess = elastic.elastic_queries.calc_percentage(all_searches, f, n)#регион-группа
 
 plot_heatmap(percentage_of_sucsess, '% удачных поисков. Регион vs Товарная группа')
 
 
 #+++++++++++++++++++++++++++++++++
 f = elastic.elastic_queries.brand_group
-percentage_of_sucsess = elastic.elastic_queries.calc_percentage(all_searches, df_sucsess_searches, f)#бренд-группа
+percentage_of_sucsess = elastic.elastic_queries.calc_percentage(all_searches, f, n)#бренд-группа
 
 plot_heatmap(percentage_of_sucsess, '% удачных поисков, Бренд vs Товарная группа')
 
