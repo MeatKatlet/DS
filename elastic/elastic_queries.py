@@ -181,6 +181,9 @@ class Search_results_events(Base_Elastic):
         self.with_crosses = True
 
         self.not_succsess = 0
+        #self.count = 0
+        #self.count2 = 0
+        #self.count3 = 0
 
         #тсп/не тсп(одна партерра пока видимо)
         #локальный склад/не локальный
@@ -196,7 +199,7 @@ class Search_results_events(Base_Elastic):
         # здесь будем фильтровать нужные мне результаты выдачи и сохранять во фрейм
         length = len(list_of_elements)-1
         for i in range(0, length, 1):
-
+            #self.count += 1
             hit = list_of_elements[i]["_source"]
             timestamp = hit["timestamp"]
             search_query = hit["search_query"]
@@ -205,7 +208,7 @@ class Search_results_events(Base_Elastic):
                 region = hit["region"]
                 #if hit["search_uid"] in self.list_of_search_uids:
 
-                length2 = len(hit["results_groups"]) - 1
+                length2 = len(hit["results_groups"])
 
 
                 #надо узнать статистику случаев когда больше двух брендов в результате выдачи
@@ -217,18 +220,17 @@ class Search_results_events(Base_Elastic):
                 for k in range(0, length2, 1):#по всем элементам results_groups, в каждом элементе один атрибут search_results
                     results_group_item = hit["results_groups"][k]
 
-                    length3 = len(results_group_item["search_results"]) - 1
+                    length3 = len(results_group_item["search_results"])
 
                     for j in range(0, length3, 1):
                         element_of_search_results = results_group_item["search_results"][j]
 
-                        brand = element_of_search_results["brand_name"]
-
-                        group = element_of_search_results["market_group_name"]
-
 
                         # отсутствующая в наличии запчасть это неудачный поиск!
-                        if "part" in element_of_search_results:
+                        if "part" in element_of_search_results and "brand_name" in element_of_search_results and "market_group_name" in element_of_search_results:
+
+                            brand = element_of_search_results["brand_name"]
+                            group = element_of_search_results["market_group_name"]
                             #search_result = 1  # удачный поиск
                             #cross = "cross" in element_of_search_results
 
@@ -263,20 +265,21 @@ class Search_results_events(Base_Elastic):
 
                 elif succsess_searches_count == 1:#удачный - один в выдаче
 
-
+                    #self.count3 += 1
                     self.all_searches.loc[len(self.all_searches)] = [timestamp, search_query, list(unique_brands)[0], region, list(unique_market_groups)[0]]
 
                 elif succsess_searches_count > 1 and len(unique_brands) == 1 and len(unique_market_groups) == 1:#удачный - 2 и один уникальный юренд и товарная группа
-
+                    #self.count3 += 1
                     self.all_searches.loc[len(self.all_searches)] = [timestamp, search_query, list(unique_brands)[0], region, list(unique_market_groups)[0]]
 
                 elif succsess_searches_count > 1:
-
+                    #self.count2 += 1
                     for row in range(0,len(brands),1):
 
-                        self.searches_not_standart[len(self.searches_not_standart)] = [timestamp, brands[row],market_groups[row]]
+                        self.searches_not_standart.loc[len(self.searches_not_standart)] = [timestamp, brands[row],market_groups[row]]
 
                 #статистику по одиночным посчитаем по self.all_searches
+
 
 
 
@@ -370,12 +373,15 @@ def draw_statistics(search_results):
     s = search_results.all_searches.shape
     print(s[0])#количество удачных поисков всего
 
-    a1 = search_results.searches_not_standart.groupby('timestamp', as_index=False)['Brand'].count()
-    a2 = search_results.searches_not_standart.groupby('timestamp', as_index=False)['Group'].count()
+
+
+    a1 = search_results.searches_not_standart.groupby('Timestamp', as_index=False)['Brand'].count()
+    a2 = search_results.searches_not_standart.groupby('Timestamp', as_index=False)['Group'].count()
 
     r = pd.merge(a1, a2)
+    r.to_csv('two_or_more_brands_or_groups_in_serch_results.csv')
 
-    r.groupby(0,1,2, as_index=False).count()#смотрим сколько каких сочетаний бренда и групп есть
+    #r.groupby("Timestamp",'Brand','Group', as_index=False).count()#смотрим сколько каких сочетаний бренда и групп есть
     #дальше на основе этого будем смотреть что делать дальше!
 
 
@@ -420,7 +426,7 @@ def run_logic(from_db=True):
 
     #df_sucsess_searches = all_searches.query("Search_result == 1")
 
-    return  [all_searches,n]
+    return  [all_searches,1]
 
 
 
@@ -452,6 +458,8 @@ def calc_percentage(search_results, f,n):
                 percentage_in_cell = float(0)
             """
             percentage_in_cell = (all_searches.iloc[i][j]*100)/(sum + n)
+            if percentage_in_cell>0:
+                percentage_in_cell = 1
 
 
 

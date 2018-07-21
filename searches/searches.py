@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import warnings
 import pandas as pd
 import elastic.elastic_queries
+from matplotlib.patches import Rectangle
 warnings.filterwarnings('ignore')
 #from searches.elastic_queries import Base_Elastic
 #from searches.elastic_queries import Searches_in_input_field_event
@@ -13,8 +14,7 @@ warnings.filterwarnings('ignore')
 #from searches.elastic_queries import region_brand
 
 
-def heatmap(data, row_labels, col_labels, ax=None,
-            cbar_kw={}, cbarlabel="", **kwargs):
+def heatmap(data, row_labels, col_labels, ax=None,cbar_kw={}, cbarlabel="", **kwargs):
     """
     Create a heatmap from a numpy array and two lists of labels.
 
@@ -48,7 +48,7 @@ def heatmap(data, row_labels, col_labels, ax=None,
     ax.set_xticks(np.arange(data.shape[1]))
     ax.set_yticks(np.arange(data.shape[0]))
     # ... and label them with the respective list entries.
-    ax.set_xticklabels(col_labels)
+    ax.set_xticklabels(col_labels,fontsize=8)
     ax.set_yticklabels(row_labels)
 
     # Let the horizontal axes labeling appear on top.
@@ -63,7 +63,7 @@ def heatmap(data, row_labels, col_labels, ax=None,
 
     ax.set_xticks(np.arange(data.shape[1]+1)-.5, minor=True)
     ax.set_yticks(np.arange(data.shape[0]+1)-.5, minor=True)
-    ax.grid(which="minor", color="w", linestyle='-', linewidth=3)
+    ax.grid(which="minor", color="w", linestyle='-', linewidth=5)
     ax.tick_params(which="minor", bottom=False, left=False)
 
     return im#, cbar
@@ -120,13 +120,13 @@ def annotate_heatmap(im, data=None, valfmt="{x:.2f}",
             texts.append(text)
 
 
-def plot_heatmap(percentage_of_sucsess,title):
+def plot_heatmap(percentage_of_sucsess,title,figsize):
 
-    fig, ax = plt.subplots(figsize=(26, 26))
+    fig, ax = plt.subplots(figsize=figsize)
     # x = percentage_of_sucsess.values
     # x.astype(float)
     df = percentage_of_sucsess
-    percentage_of_sucsess = percentage_of_sucsess[percentage_of_sucsess.columns].astype(float)
+    percentage_of_sucsess = percentage_of_sucsess[percentage_of_sucsess.columns].astype(int)
 
     percentage_of_sucsess = percentage_of_sucsess.loc[(percentage_of_sucsess != 0).any(axis=1)]
     percentage_of_sucsess = percentage_of_sucsess.loc[:, (percentage_of_sucsess != 0).any(axis=0)]
@@ -135,8 +135,13 @@ def plot_heatmap(percentage_of_sucsess,title):
     col_labels = list(percentage_of_sucsess.columns)
 
     im = heatmap(percentage_of_sucsess.values, row_labels, col_labels, ax=ax, cmap="YlGn",cbarlabel="%, удачных поисков")
-    texts = annotate_heatmap(im, valfmt="{x:.1f}")
-    plt.title(title, y=1.08)
+    texts = annotate_heatmap(im, valfmt="{x}")
+    plt.title(title, y=1.32)
+    #r = ax.add_patch(Rectangle((-0.5, -0.5), 1, 1, fill=False, edgecolor='blue'))
+
+    #transform = matplotlib.transforms.Affine2D().translate(-0.5, 0)
+    #r.set_transform(transform + ax.transData)
+
     fig.tight_layout()
     plt.show()
 
@@ -148,7 +153,7 @@ def plot_heatmap(percentage_of_sucsess,title):
 
 
 
-all_searches,n = elastic.elastic_queries.run_logic(True)#надо сделать чтобы лидо запрос из бд, и результатом будет фрейм, который мы сохраняем в файл, либо считываем из файла фрейм
+all_searches,n = elastic.elastic_queries.run_logic(False)#надо сделать чтобы лидо запрос из бд, и результатом будет фрейм, который мы сохраняем в файл, либо считываем из файла фрейм
 #по каждому сочетанию сделать heatmap
 """
 география - бренды
@@ -194,21 +199,21 @@ f = elastic.elastic_queries.region_brand
 percentage_of_sucsess = elastic.elastic_queries.calc_percentage(all_searches,f, n)#регион-бренд
 
 
-plot_heatmap(percentage_of_sucsess, '% удачных поисков. Регион vs Бренд')
+plot_heatmap(percentage_of_sucsess, '% удачных поисков. Регион vs Бренд',(30, 22))
 
 
 #++++++++++++++++++++++
 f = elastic.elastic_queries.region_group
 percentage_of_sucsess = elastic.elastic_queries.calc_percentage(all_searches, f, n)#регион-группа
 
-plot_heatmap(percentage_of_sucsess, '% удачных поисков. Регион vs Товарная группа')
+plot_heatmap(percentage_of_sucsess, '% удачных поисков. Регион vs Товарная группа',(90, 22))
 
 
 #+++++++++++++++++++++++++++++++++
 f = elastic.elastic_queries.brand_group
 percentage_of_sucsess = elastic.elastic_queries.calc_percentage(all_searches, f, n)#бренд-группа
 
-plot_heatmap(percentage_of_sucsess, '% удачных поисков, Бренд vs Товарная группа')
+plot_heatmap(percentage_of_sucsess, '% удачных поисков, Бренд vs Товарная группа',(90, 44))
 
 
 
