@@ -39,8 +39,13 @@ class Base_Elastic():
         # self.query = ""
         self.f = open('result.json', 'a')
 
+    def get_query(self,q,list_of_args=list()):
+        query = q(list_of_args)
+        return query
+
     def get_data(self, q, index, timestampe_field_name,size=100):
-        query = q()
+        #query = q()
+        query = self.get_query(q)
         body = {
             "size": size,
             "query": query,
@@ -88,7 +93,8 @@ class Base_Elastic():
 
         while True:
 
-            query = q(str(last_tsmp))
+            #query = q(str(last_tsmp))
+            query = self.get_query(q, list(str(last_tsmp)))
 
             body = {
                 "size": size,
@@ -173,7 +179,7 @@ class Search_results_events(Base_Elastic):
         #self.list_of_search_uids = list_of_search_uids
 
         # создаем df в котором будут в каждой строке инфа по поиску запчасти, колонки искомый артикул?, результат поиска(1/0, удачный/неудачный), бренд, регион, товарная группа,
-        self.all_searches = pd.DataFrame(columns=['Timestamp', 'Search_query', 'Brand', 'Region', 'Group'])
+        self.all_searches = pd.DataFrame(columns=['Search_uid','Timestamp', 'Search_query', 'Brand', 'Region', 'Group'])
         self.searches_not_standart = pd.DataFrame(columns=['Timestamp', 'Brand', 'Group'])#статистика по нестандартным выдачам
 
         self.with_tcp = False  # брать в расчет или нет товары строннних поставщиков(заменители) (is_approximate_delivery_interval?) это для задачи 2, для задачи 1 их в расчет не брать
@@ -190,8 +196,6 @@ class Search_results_events(Base_Elastic):
         #есть кросс или нет на искомый товар
         #регион локального склада
         #регион не локального склада
-
-
 
 
     def do_logic(self, list_of_elements):
@@ -244,6 +248,7 @@ class Search_results_events(Base_Elastic):
                                     succsess_searches_count += 1
                                     brands.append(brand)
                                     market_groups.append(group)
+                                    search_uid = hit["search_uid"]
 
 
                                 elif self.with_tcp == True:  # заказали и те и те (задача 2)
@@ -252,6 +257,7 @@ class Search_results_events(Base_Elastic):
                                     succsess_searches_count += 1
                                     brands.append(brand)
                                     market_groups.append(group)
+                                    search_uid = hit["search_uid"]
 
                 #keys = list(brands.keys())
                 #keys2 = list(market_groups.keys())
@@ -266,11 +272,11 @@ class Search_results_events(Base_Elastic):
                 elif succsess_searches_count == 1:#удачный - один в выдаче
 
                     #self.count3 += 1
-                    self.all_searches.loc[len(self.all_searches)] = [timestamp, search_query, list(unique_brands)[0], region, list(unique_market_groups)[0]]
+                    self.all_searches.loc[len(self.all_searches)] = [search_uid,timestamp, search_query, list(unique_brands)[0], region, list(unique_market_groups)[0]]
 
                 elif succsess_searches_count > 1 and len(unique_brands) == 1 and len(unique_market_groups) == 1:#удачный - 2 и один уникальный юренд и товарная группа
                     #self.count3 += 1
-                    self.all_searches.loc[len(self.all_searches)] = [timestamp, search_query, list(unique_brands)[0], region, list(unique_market_groups)[0]]
+                    self.all_searches.loc[len(self.all_searches)] = [search_uid, timestamp, search_query, list(unique_brands)[0], region, list(unique_market_groups)[0]]
 
                 elif succsess_searches_count > 1:
                     #self.count2 += 1
@@ -279,12 +285,6 @@ class Search_results_events(Base_Elastic):
                         self.searches_not_standart.loc[len(self.searches_not_standart)] = [timestamp, brands[row],market_groups[row]]
 
                 #статистику по одиночным посчитаем по self.all_searches
-
-
-
-
-
-
 
 
     def do_logic_short(self, list_of_elements):
@@ -296,8 +296,52 @@ class Search_results_events(Base_Elastic):
     def json_end_file(self):
         return
 
+class Search_sales(Base_Elastic):
 
-def query_make(gt=10):
+    def __init__(self,search_uids_list,from_timestamp):
+
+        self.search_uids_list = search_uids_list
+        self.from_timestamp = from_timestamp
+
+        self.sales = pd.DataFrame(columns=['Search_uid','Timestamp_of_sale','Sale'])
+
+        self.sales_without_searches = pd.DataFrame(columns=['Search_uid','Timestamp_of_sale','Sale'])
+
+    def get_query(self,q,list_of_args=list()):
+
+        list_of_args.append(str(self.from_timestamp))
+
+        query = q(list_of_args)
+        return query
+
+
+    def do_logic(self,list_of_elements):
+
+        length = len(list_of_elements)
+        for i in range(0, length, 1):
+            sale = list_of_elements[i]
+            if sale["search_uid"] in self.search_uids_list:
+                self.sales.loc[len(self.sales)] = [sale["search_uid"],sale["timestamp"],1]
+            else:
+                self.sales_without_searches.loc[len(self.sales_without_searches)] = [sale["search_uid"],sale["timestamp"],1]
+
+
+        #составим список, присоединим потом к фрейму
+
+    def do_logic_short(self, list_of_elements):
+        self.do_logic(list_of_elements)
+
+    def json_begin_file(self):
+        return
+
+    def json_end_file(self):
+        return
+
+def query_make(list_of_args):
+    if len(list_of_args)==0:
+        gt = 10
+    else:
+        gt = list_of_args[0]
     query = {
         "bool": {
             "must": [
@@ -318,7 +362,11 @@ def query_make(gt=10):
     return query
 
 
-def query_make2(gt=10):
+def query_make2(list_of_args):
+    if len(list_of_args)==0:
+        gt = 10
+    else:
+        gt = list_of_args[0]
     query = {
         "bool": {
             "must": [
@@ -342,9 +390,13 @@ def query_make2(gt=10):
 
     return query
 
-def query_make3(gt=10):
+def query_make3(list_of_args):
+    if len(list_of_args)==0:
+        gt = 10
+    else:
+        gt = list_of_args[0]
     query = {
-            "bool": {
+       "bool": {
               "must": [
                 {"range": {"timestamp": {"gt": gt}}},
                 {
@@ -364,16 +416,39 @@ def query_make3(gt=10):
                     "exists" : { "field" : "results_groups.search_results.market_group_name" }
                 }
               ]
-            }
+       }
     }
     return query
+
+def query_make4(list_of_args):
+    if len(list_of_args)==1:
+        gt = list_of_args[0]  # базовый timestamp будет добавлять
+        range = {"timestamp": {"gt": gt}}
+    else:
+        gt = list_of_args[0]#это будет когда уже в цикле идет запрос
+        range = {"timestamp": {"gt": gt}}
+
+    query = {
+         "bool": {
+             "must": [
+                 {
+                     "range": range
+                 },
+                 {
+                     "match": {
+                        "event": "checkout"
+                     }
+                 }
+             ]
+         }
+    }
+    return query
+
 
 
 def draw_statistics(search_results):
     s = search_results.all_searches.shape
     print(s[0])#количество удачных поисков всего
-
-
 
     a1 = search_results.searches_not_standart.groupby('Timestamp', as_index=False)['Brand'].count()
     a2 = search_results.searches_not_standart.groupby('Timestamp', as_index=False)['Group'].count()
@@ -386,7 +461,7 @@ def draw_statistics(search_results):
 
 
 
-def run_logic(from_db=True):
+def run_logic(from_db=True,with_sales=False):
     #todo надо будет делать чтобы уже сохраненные данные в файле не запрашивались, видимо time stamp, надо сохранить timestamp последнего документа, или вообще хранить их в отдельной колонке, поскольку временные ряды пригодятся!
 
     n = 0
@@ -417,6 +492,27 @@ def run_logic(from_db=True):
 
         draw_statistics(search_results)
 
+        #+++++++++++++++
+        if with_sales==True:
+
+            #делаем запрос на продажи
+            sales = Search_sales(Base_Elastic,list(all_searches.columns[0:1]))
+            q = query_make4
+            sales.get_data(q, index, timestampe_field_name)
+
+            #todo проверить на уникальность все значения индекса!
+            l1 = len(all_searches['Search_uid'].unique())
+            l2 = len(sales.sales['Search_uid'].unique())
+            if l1 != all_searches.shape[0] or l2 != sales.sales.shape[0]:
+                exit(1)
+
+            all_searches.set_index('Search_uid')
+            sales.sales.set_index('Search_uid')
+
+            all_searches = pd.concat([all_searches, sales.sales], axis=1, sort=False)
+            all_searches.fillna(0)
+
+
         all_searches.to_csv('out.csv')
 
     else:
@@ -440,7 +536,7 @@ def calc_percentage(search_results, f,n):
     #percentage_of_sucsess = pd.DataFrame()
 
     s = all_searches.shape
-    for i in range(0, s[0], 1):  # по строкам
+    for i in range(0, s[0], 1): # по строкам
         row = []
         #row_name = all_searches.index[i]
         for j in range(0, s[1], 1):  # по столбцам
@@ -458,14 +554,22 @@ def calc_percentage(search_results, f,n):
                 percentage_in_cell = float(0)
             """
             percentage_in_cell = (all_searches.iloc[i][j]*100)/(sum + n)
-            if percentage_in_cell>0:
-                percentage_in_cell = 1
+            #if percentage_in_cell>0:
+             #   percentage_in_cell = 1
 
 
 
             row.append(percentage_in_cell)
 
         percentage_of_sucsess.iloc[i] = row
+
+        #++++++++++++++++++++
+        #иатрицу конверсии в продажи считаем
+        #заодно проверим согласованноссть с поисками
+        #сначала отфильтровать поиски завершившиеся продажей Sales==1,
+        #потом на основе этого сделать кросстаб по разрезам,
+        #пройтись по всем поискам по координатам поисков завершенных продажей в каждой ячейке посчитать % удачных поисков завершенных продажей, идти по поисковой матрице , если нет индекса в продажной то поиски в ячейке без продаж!
+
 
     return percentage_of_sucsess
 
