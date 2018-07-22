@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import warnings
 import pandas as pd
 import elastic.elastic_queries
+from elastic.elastic_queries import Search_plots_factory
+from elastic.elastic_queries import Sales_plots_factory
 from matplotlib.patches import Rectangle
 warnings.filterwarnings('ignore')
 #from searches.elastic_queries import Base_Elastic
@@ -152,8 +154,9 @@ def plot_heatmap(percentage_of_sucsess,title,figsize):
     print(df.index)
 
 
+search_plots_factory = Search_plots_factory()
 
-all_searches,n = elastic.elastic_queries.run_logic(False)#надо сделать чтобы лидо запрос из бд, и результатом будет фрейм, который мы сохраняем в файл, либо считываем из файла фрейм
+search_plots_factory.get_main_dataframe(True)#надо сделать чтобы лидо запрос из бд, и результатом будет фрейм, который мы сохраняем в файл, либо считываем из файла фрейм
 #по каждому сочетанию сделать heatmap
 """
 география - бренды
@@ -196,25 +199,32 @@ plt.show()
 
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 f = elastic.elastic_queries.region_brand
-percentage_of_sucsess = elastic.elastic_queries.calc_percentage(all_searches,f, n)#регион-бренд
-
-
-plot_heatmap(percentage_of_sucsess, '% удачных поисков. Регион vs Бренд',(30, 22))
+search_plots_factory.create_heatmap(f,'% удачных поисков. Регион vs Бренд',(30, 22),"slice_region_brand")
 
 
 #++++++++++++++++++++++
 f = elastic.elastic_queries.region_group
-percentage_of_sucsess = elastic.elastic_queries.calc_percentage(all_searches, f, n)#регион-группа
-
-plot_heatmap(percentage_of_sucsess, '% удачных поисков. Регион vs Товарная группа',(90, 22))
-
+search_plots_factory.create_heatmap(f, '% удачных поисков. Регион vs Товарная группа',(90, 22),"slice_region_group")
 
 #+++++++++++++++++++++++++++++++++
 f = elastic.elastic_queries.brand_group
-percentage_of_sucsess = elastic.elastic_queries.calc_percentage(all_searches, f, n)#бренд-группа
+search_plots_factory.create_heatmap(f,'% удачных поисков, Бренд vs Товарная группа',(90, 44),"slice_brand_group")
 
-plot_heatmap(percentage_of_sucsess, '% удачных поисков, Бренд vs Товарная группа',(90, 44))
 
+#теперь построим хитмапы на по % поисков завершенных продажами в 3 разрезах тоже
+
+
+sales_plots_factory = Sales_plots_factory()
+
+sales_plots_factory.get_statistics_of_serches_and_sales()
+
+sales_plots_factory.create_heatmap("none",'% поисков завершенных продажей. Регион vs Бренд',(30, 22),"slice_region_brand")
+
+sales_plots_factory.create_heatmap("none", '% поисков завершенных продажей. Регион vs Товарная группа',(90, 22),"slice_region_group")
+
+sales_plots_factory.create_heatmap("none",'% поисков завершенных продажей. Бренд vs Товарная группа',(90, 44),"slice_brand_group")
+
+a = 1
 
 
 
