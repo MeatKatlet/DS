@@ -3,9 +3,9 @@ import matplotlib
 import matplotlib.pyplot as plt
 import warnings
 import pandas as pd
-import elastic.elastic_queries
-from elastic.elastic_queries import Search_plots_factory
-from elastic.elastic_queries import Sales_plots_factory
+import elastic.elastic_queries_new_logic
+#from elastic.elastic_queries import Search_plots_factory
+#from elastic.elastic_queries import Sales_plots_factory
 from matplotlib.patches import Rectangle
 warnings.filterwarnings('ignore')
 #from searches.elastic_queries import Base_Elastic
@@ -109,8 +109,8 @@ def annotate_heatmap(im, data=None, valfmt="{x:.2f}",
     kw.update(textkw)
 
     # Get the formatter in case a string is supplied
-    if isinstance(valfmt, str):
-        valfmt = matplotlib.ticker.StrMethodFormatter(valfmt)
+    #if isinstance(valfmt, str):
+    #    valfmt = matplotlib.ticker.StrMethodFormatter(valfmt)
 
     # Loop over the data and create a `Text` for each "pixel".
     # Change the text's color depending on the data.
@@ -118,17 +118,27 @@ def annotate_heatmap(im, data=None, valfmt="{x:.2f}",
     for i in range(data.shape[0]):
         for j in range(data.shape[1]):
             kw.update(color=textcolors[im.norm(data[i, j]) > threshold])
-            text = im.axes.text(j, i, valfmt(data[i, j], None), **kw)
+            if data[i, j]==0.0:
+                valfmt = matplotlib.ticker.StrMethodFormatter("{x}")
+                text = im.axes.text(j, i, valfmt(0, None), **kw)
+            else:
+                valfmt = matplotlib.ticker.StrMethodFormatter(valfmt)
+                text = im.axes.text(j, i, valfmt(data[i, j], None), **kw)
+            #text = im.axes.text(j, i, valfmt(data[i, j], None), **kw)
             texts.append(text)
 
 
 def plot_heatmap(percentage_of_sucsess,title,figsize):
+    figsize = []
+    figsize[0] = 0.49 * percentage_of_sucsess.shape[0]
+    figsize[1] = 0.21 * percentage_of_sucsess.shape[1]
+
 
     fig, ax = plt.subplots(figsize=figsize)
     # x = percentage_of_sucsess.values
     # x.astype(float)
     df = percentage_of_sucsess
-    percentage_of_sucsess = percentage_of_sucsess[percentage_of_sucsess.columns].astype(int)
+    percentage_of_sucsess = percentage_of_sucsess[percentage_of_sucsess.columns].astype(float)
 
     percentage_of_sucsess = percentage_of_sucsess.loc[(percentage_of_sucsess != 0).any(axis=1)]
     percentage_of_sucsess = percentage_of_sucsess.loc[:, (percentage_of_sucsess != 0).any(axis=0)]
@@ -136,8 +146,8 @@ def plot_heatmap(percentage_of_sucsess,title,figsize):
     row_labels = list(percentage_of_sucsess.index)
     col_labels = list(percentage_of_sucsess.columns)
 
-    im = heatmap(percentage_of_sucsess.values, row_labels, col_labels, ax=ax, cmap="YlGn",cbarlabel="%, удачных поисков")
-    texts = annotate_heatmap(im, valfmt="{x}")
+    im = heatmap(percentage_of_sucsess.values, row_labels, col_labels, ax=ax, cmap="cool",cbarlabel="%, удачных поисков")#YlGn
+    texts = annotate_heatmap(im, valfmt="{x:.1f}")
     plt.title(title, y=1.32)
     #r = ax.add_patch(Rectangle((-0.5, -0.5), 1, 1, fill=False, edgecolor='blue'))
 
@@ -153,78 +163,89 @@ def plot_heatmap(percentage_of_sucsess,title,figsize):
     print("\n--------------------\n")
     print(df.index)
 
+def main():
 
-search_plots_factory = Search_plots_factory()
+    search_plots_factory = elastic.elastic_queries_new_logic.Search_plots_factory()
 
-search_plots_factory.get_main_dataframe(True)#надо сделать чтобы лидо запрос из бд, и результатом будет фрейм, который мы сохраняем в файл, либо считываем из файла фрейм
-#по каждому сочетанию сделать heatmap
-"""
-география - бренды
-география - товарные группы
-бренды - товарные группы
-figsize=(160, 17)
-harvest = np.array([[0.8, 0.0, 2.5, 3.9, 0.0, 4.0, 0.0],
-                    [2.4, 0.0, 4.0, 1.0, 2.7, 0.0, 0.0],
-                    [1.1, 0.0, 0.8, 4.3, 1.9, 4.4, 0.0],
-                    [0.6, 0.0, 0.3, 0.0, 3.1, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.3, 0.0, 0.0, 0.0, 0.0, 3.2, 5.1],
-                    [0.1, 0.0, 0.0, 1.4, 0.0, 1.9, 6.3]])
-
-
-#
-df = pd.DataFrame(harvest)
-df = df.loc[(df!=0).any(axis=1)]
-df = df.loc[:, (df != 0).any(axis=0)]
-a= 14
-
-"""
-
-
-"""
-harvest = np.random.rand(45,737)
+    search_plots_factory.get_main_dataframe(True)#надо сделать чтобы лидо запрос из бд, и результатом будет фрейм, который мы сохраняем в файл, либо считываем из файла фрейм
+    #по каждому сочетанию сделать heatmap
+    """
+    география - бренды
+    география - товарные группы
+    бренды - товарные группы
+    figsize=(160, 17)
+    harvest = np.array([[0.8, 0.0, 2.5, 3.9, 0.0, 4.0, 0.0],
+                        [2.4, 0.0, 4.0, 1.0, 2.7, 0.0, 0.0],
+                        [1.1, 0.0, 0.8, 4.3, 1.9, 4.4, 0.0],
+                        [0.6, 0.0, 0.3, 0.0, 3.1, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                        [1.3, 0.0, 0.0, 0.0, 0.0, 3.2, 5.1],
+                        [0.1, 0.0, 0.0, 1.4, 0.0, 1.9, 6.3]])
+    
+    
+    #
+    df = pd.DataFrame(harvest)
+    df = df.loc[(df!=0).any(axis=1)]
+    df = df.loc[:, (df != 0).any(axis=0)]
+    a= 14
+    
+    """
 
 
-fig, ax = plt.subplots(figsize=(160, 17))#figsize=(15, 15)
-    #x = percentage_of_sucsess.values
-    #x.astype(float)
-
-im = heatmap(harvest, vegetables, farmers, ax=ax, cmap="YlGn",cbarlabel="%, удачных поисков")
-texts = annotate_heatmap(im, valfmt="{x:.1f}")
-
-fig.tight_layout()
-plt.show()
-"""
-
-
-#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-f = elastic.elastic_queries.region_brand
-search_plots_factory.create_heatmap(f,'% удачных поисков. Регион vs Бренд',(30, 22),"slice_region_brand")
-
-
-#++++++++++++++++++++++
-f = elastic.elastic_queries.region_group
-search_plots_factory.create_heatmap(f, '% удачных поисков. Регион vs Товарная группа',(90, 22),"slice_region_group")
-
-#+++++++++++++++++++++++++++++++++
-f = elastic.elastic_queries.brand_group
-search_plots_factory.create_heatmap(f,'% удачных поисков, Бренд vs Товарная группа',(90, 44),"slice_brand_group")
+    """
+    harvest = np.random.rand(45,737)
+    
+    
+    fig, ax = plt.subplots(figsize=(160, 17))#figsize=(15, 15)
+        #x = percentage_of_sucsess.values
+        #x.astype(float)
+    
+    im = heatmap(harvest, vegetables, farmers, ax=ax, cmap="YlGn",cbarlabel="%, удачных поисков")
+    texts = annotate_heatmap(im, valfmt="{x:.1f}")
+    
+    fig.tight_layout()
+    plt.show()
+    """
 
 
-#теперь построим хитмапы на по % поисков завершенных продажами в 3 разрезах тоже
+
+    #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    f = elastic.elastic_queries_new_logic.region_brand
+    search_plots_factory.slice_col1 = "Region"
+    search_plots_factory.slice_col2 = "Brand"
+    search_plots_factory.create_heatmap(plot_heatmap, f,'% удачных поисков. Регион vs Бренд',(31, 22),"slice_region_brand")
 
 
-sales_plots_factory = Sales_plots_factory()
+    #++++++++++++++++++++++
+    f = elastic.elastic_queries_new_logic.region_group
+    search_plots_factory.slice_col1 = "Region"
+    search_plots_factory.slice_col2 = "Group"
+    search_plots_factory.create_heatmap(plot_heatmap, f, '% удачных поисков. Регион vs Товарная группа',(90, 22),"slice_region_group")
 
-sales_plots_factory.get_statistics_of_serches_and_sales()
+    #+++++++++++++++++++++++++++++++++
+    f = elastic.elastic_queries_new_logic.brand_group
+    search_plots_factory.slice_col1 = "Brand"
+    search_plots_factory.slice_col2 = "Group"
+    search_plots_factory.create_heatmap(plot_heatmap, f,'% удачных поисков, Бренд vs Товарная группа',(90, 44),"slice_brand_group")
 
-sales_plots_factory.create_heatmap("none",'% поисков завершенных продажей. Регион vs Бренд',(30, 22),"slice_region_brand")
 
-sales_plots_factory.create_heatmap("none", '% поисков завершенных продажей. Регион vs Товарная группа',(90, 22),"slice_region_group")
+    #теперь построим хитмапы на по % поисков завершенных продажами в 3 разрезах тоже
 
-sales_plots_factory.create_heatmap("none",'% поисков завершенных продажей. Бренд vs Товарная группа',(90, 44),"slice_brand_group")
+    sales_plots_factory = elastic.elastic_queries_new_logic.Sales_plots_factory(search_plots_factory, True)
 
-a = 1
+    sales_plots_factory.get_statistics_of_serches_and_sales()
+
+
+    sales_plots_factory.create_heatmap(plot_heatmap,"none",'% поисков завершенных продажей. Регион vs Бренд',(30, 22),"slice_region_brand")
+
+    sales_plots_factory.create_heatmap(plot_heatmap,"none", '% поисков завершенных продажей. Регион vs Товарная группа',(90, 22),"slice_region_group")
+
+    sales_plots_factory.create_heatmap(plot_heatmap,"none",'% поисков завершенных продажей. Бренд vs Товарная группа',(90, 44),"slice_brand_group")
+
+    a = 1
+
+if __name__== "__main__":
+  main()
 
 
 
