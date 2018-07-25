@@ -11,6 +11,7 @@ import numpy as np
 import requests
 import warnings
 import time
+import collections
 #import searches.searches
 #from searches import searches
 from  frame_partial_reader.frame_partial_reader import Frame_partial_reader
@@ -182,7 +183,7 @@ class Search_results_events(Base_Elastic):
         #self.list_of_search_uids = list_of_search_uids
 
         # создаем df в котором будут в каждой строке инфа по поиску запчасти, колонки искомый артикул?, результат поиска(1/0, удачный/неудачный), бренд, регион, товарная группа,
-        self.all_searches = pd.DataFrame(columns=['Search_uid','Timestamp', 'Search_query', 'Brand', 'Region', 'Group', 'Search_result'])#бренд/товарная группа браться будут из поискового запроса
+        self.all_searches = pd.DataFrame(columns=['Search_uid','Timestamp', 'Search_query', 'brand', 'region', 'group', 'Search_result'])#бренд/товарная группа браться будут из поискового запроса
         #self.searches_not_standart = pd.DataFrame(columns=['Timestamp', 'Brand', 'Group'])#статистика по нестандартным выдачам
 
         self.with_tcp = False  # брать в расчет или нет товары строннних поставщиков(заменители) (is_approximate_delivery_interval?) это для задачи 2, для задачи 1 их в расчет не брать
@@ -195,11 +196,17 @@ class Search_results_events(Base_Elastic):
         pr.read("parts_with_mng.csv")
 
         self.goods_classifier = pr.parse_result
+        self.brands_dict = pr.brands
+        self.groups_dict = pr.groups
+        self.regions_dict = collections.OrderedDict()
 
         #номер детали - хеш(бренд+группа) (бренд группа)
+        self.not_founded_several_brands = 0
 
-        self.not_succsess = 0
-        self.not_succsess2 = 0
+        self.not_founded_out_of_articles_range = 0
+        self.founded_several_combinations = 0
+
+        #self.not_succsess2 = 0
         #self.count = 0
         #self.count2 = 0
         #self.count3 = 0
@@ -229,6 +236,8 @@ class Search_results_events(Base_Elastic):
             if "region" in hit:
                 region = hit["region"]
 
+                if region not in self.regions_dict:
+                   self.regions_dict[region] = len(self.regions_dict)
 
                 length2 = len(hit["results_groups"])
 
@@ -239,6 +248,7 @@ class Search_results_events(Base_Elastic):
                 #succsess_searches_count2 = 0
                 #brands = list()
                 #market_groups = list()
+                brand_group_variants = {}
                 #df = pd.DataFrame(columns=["brand","group"])
                 empty_result = True
 
@@ -254,12 +264,12 @@ class Search_results_events(Base_Elastic):
                         # отсутствующая в наличии запчасть это неудачный поиск!
                         if "part" in element_of_search_results and "brand_name" in element_of_search_results and "market_group_name" in element_of_search_results:
 
-                            brand = element_of_search_results["brand_name"]
+                            brand = element_of_search_results["brand_name"].replace(r"'", "").replace("\\","")
                             group = element_of_search_results["market_group_name"]
 
                             #совпадение по бренду/товарной группе из поисковой строки
 
-                            if self.check_presence_in_list(search_query, brand, group) == True:#есть в списке сочетаний брендов и групп по этому номеру товара
+                            if brand!= "" and group!= "" and self.check_presence_in_list(search_query, brand, group) == True:#есть в списке сочетаний брендов и групп по этому номеру товара
                                 #search_result = 1  # удачный поиск
                                 #cross = "cross" in element_of_search_results
 
@@ -270,6 +280,7 @@ class Search_results_events(Base_Elastic):
                                         succsess_searches_count += 1
                                         #brands.append(brand)
                                         #market_groups.append(group)
+                                        brand_group_variants[(self.brands_dict[brand],self.groups_dict[group])] = 0
                                         #df.loc[len(df)] = [brand,group]
 
 
@@ -279,6 +290,7 @@ class Search_results_events(Base_Elastic):
                                         #df.loc[len(df)] = [brand, group]
                                         #brands.append(brand)
                                         #market_groups.append(group)
+                                        brand_group_variants[(self.brands_dict[brand], self.groups_dict[group])] = 0
 
 
                 #unique_brands = set(brands)
@@ -288,54 +300,108 @@ class Search_results_events(Base_Elastic):
                     #self.not_succsess2 += 1
 
                 if succsess_searches_count == 0 and empty_result == False:#ни одного - неудачный
-                    #+1 к счету таких случаев
-                    if search_query in self.goods_classifier and "not_one" not in self.goods_classifier[search_query]:#нет двойных брендов
 
-                        brand2 = list(self.goods_classifier[search_query].keys())[0]
+                    if search_query in self.goods_classifier:#искал то что у нас есть обычно(может быть в принципе)!
+                        #либо юзер подразумевал сразу несколько сочетаний брендов и групп, которые ищет
+                        if len(self.goods_classifier[search_query])>1:
+                            #todo какой бренд/группу брать?
+                            self.not_founded_several_brands += 1#4767
+                        # либо одно сочетание бренда группы которое ищет
+                        elif len(self.goods_classifier[search_query])==1:#т.е. то что не нашел то и записываем в ответ
+                            brand_code = list(self.goods_classifier[search_query].keys())[0][0]
+                            group_code = list(self.goods_classifier[search_query].keys())[0][1]
+                            self.all_searches.loc[len(self.all_searches)] = [
+                                search_uid,
+                                timestamp,
+                                search_query,
+                                brand_code,
+                                self.regions_dict[region],
+                                group_code,
+                                0
+                            ]
 
-                        self.all_searches.loc[len(self.all_searches)] = [
-                            search_uid,
-                            timestamp,
-                            search_query,
-                            brand2,
-                            region,
-                            self.goods_classifier[search_query][brand2],
-                            0
-                        ]
                     else:
-                        self.not_succsess += 1
-                        #todo как с этим быть
-                    #совпадения не было, но знаем бренд и тов группу которую хотел юзер!
+                        self.not_founded_out_of_articles_range += 1#15484
 
-                elif succsess_searches_count >= 1:#удачный - один или несколько в выдаче совпадающих с брендом/товарной группой в поиске + 3 условия наличия
 
-                    #self.count3 += 1
-                    #self.all_searches.loc[len(self.all_searches)] = [search_uid,timestamp, search_query, list(unique_brands)[0], region, list(unique_market_groups)[0],1]
-                    #if len(self.goods_classifier[search_query]) == 1:
-                    if search_query in self.goods_classifier and "not_one" not in self.goods_classifier[search_query]:  # нет двойных брендов
-                        #f = list(self.goods_classifier[search_query].keys())[0]
-                        brand2 = list(self.goods_classifier[search_query].keys())[0]
+                elif succsess_searches_count == 1 and len(brand_group_variants)==1:#одно совпадение но с одним и тем же
 
+                    # либо юзер подразумевал сразу несколько сочетаний брендов и групп, которые ищет
+                    if len(self.goods_classifier[search_query])>1:#подразумевал несколько сочетаний а нашел 1 совпадение из подразумеваемых с выжачей
+                        #todo какой бренд/группу брать для этого? правильно ли я сделал, ведь юзер подразумевает несколько сочетаний
+                        #получается те которые нашел!
+
+                        brand_code = list(brand_group_variants.keys())[0][0]
+                        group_code = list(brand_group_variants.keys())[0][1]
 
                         self.all_searches.loc[len(self.all_searches)] = [
                             search_uid,
                             timestamp,
                             search_query,
-                            brand2,
-                            region,
-                            self.goods_classifier[search_query][brand2],
+                            brand_code,
+                            self.regions_dict[region],
+                            group_code,
                             1
                         ]
-                    else:
-                        self.not_succsess2 += 1
-                        # todo как с этим быть
+
+
+                    # либо одно сочетание бренда группы которое ищет
+                    elif len(self.goods_classifier[search_query]) == 1:
+                        brand_code = list(brand_group_variants.keys())[0][0]
+                        group_code = list(brand_group_variants.keys())[0][1]
+                        self.all_searches.loc[len(self.all_searches)] = [
+                            search_uid,
+                            timestamp,
+                            search_query,
+                            brand_code,
+                            self.regions_dict[region],
+                            group_code,
+                            1
+                        ]
+
+                elif succsess_searches_count > 1 and len(brand_group_variants)==1:#несколько совпадений но с одним и тем же
+
+                    # либо юзер подразумевал сразу несколько сочетаний брендов и групп, которые ищет
+                    if len(self.goods_classifier[search_query])>1:
+                        brand_code = list(brand_group_variants.keys())[0][0]
+                        group_code = list(brand_group_variants.keys())[0][1]
+                        self.all_searches.loc[len(self.all_searches)] = [
+                            search_uid,
+                            timestamp,
+                            search_query,
+                            brand_code,
+                            self.regions_dict[region],
+                            group_code,
+                            1
+                        ]
+                    # либо одно сочетание бренда группы которое ищет
+                    elif len(self.goods_classifier[search_query]) == 1:
+                        brand_code = list(brand_group_variants.keys())[0][0]
+                        group_code = list(brand_group_variants.keys())[0][1]
+                        self.all_searches.loc[len(self.all_searches)] = [
+                            search_uid,
+                            timestamp,
+                            search_query,
+                            brand_code,
+                            self.regions_dict[region],
+                            group_code,
+                            1
+                        ]
+
+                elif succsess_searches_count > 1 and len(brand_group_variants) > 1:  # несколько совпадений но с разными сочетаниями
+                    if len(self.goods_classifier[search_query]) > 1:#здесь только так может быть!
+                        #todo какой бренд группу брать?
+                        self.founded_several_combinations += 1#46 таких
+
                 #статистику по одиночным посчитаем по self.all_searches
 
 
     def check_presence_in_list(self,search_query, brand, group):
         #hex = str(hash(brand+group))
         if search_query in self.goods_classifier:
-            if brand in self.goods_classifier[search_query] and self.goods_classifier[search_query][brand]==group:#совпадает по бренду и товарной группе
+            #if brand in self.goods_classifier[search_query] and self.goods_classifier[search_query][brand]==group:#совпадает по бренду и товарной группе
+            #входит ли сочетание бренд/группа в список сочетаний под этим номером
+            if brand in self.brands_dict and group in self.groups_dict and (self.brands_dict[brand],self.groups_dict[group]) in self.goods_classifier[search_query]:
                 return True
         return False
 
@@ -475,6 +541,7 @@ def query_make3(list_of_args):
                     "exists" : { "field" : "results_groups.search_results.market_group_name" }
                 }
               ]
+
        }
     }
     return query
@@ -520,7 +587,7 @@ class Search_plots_factory():
         self.slice_region_brand = pd.DataFrame()
         self.slice_region_group = pd.DataFrame()
         self.slice_brand_group = pd.DataFrame()
-        self.slice_col1 = ""
+        self.slice_col1 = ""#должно быть одинаковым и во фрейме и в имени поля для сохранения
         self.slice_col2 = ""
 
         self.not_succsess_searches = 0
@@ -560,6 +627,9 @@ class Search_plots_factory():
 
 
             self.main_frame = search_results.all_searches
+            self.brand_dict = search_results.brands_dict
+            self.group_dict = search_results.groups_dict
+            self.region_dict = search_results.regions_dict
 
             #self.not_succsess_searches = search_results.not_succsess
 
@@ -568,39 +638,73 @@ class Search_plots_factory():
             #special.to_csv('special.csv')#сохранить в файл
 
             #self.draw_statistics(search_results)
-
+            #todo уметь сохранять справочники с именами городоа, брендов, товарных групп, и приделывать эти имена к результирующей таблице!
 
             self.main_frame.to_csv('out.csv')
+
+            with open('brands_dict.json', 'w') as fp:
+                json.dump(self.brands_dict, fp)
+            with open('groups_dict.json', 'w') as fp:
+                json.dump(self.groups_dict, fp)
+            with open('regions_dict.json', 'w') as fp:
+                json.dump(self.regions_dict, fp)
 
         else:
             #special = pd.read_csv('special.csv')
             #self.not_succsess_searches = special.iloc[0][1]
 
             self.main_frame = pd.read_csv('out.csv')
+            with open('brands_dict.json') as data_file:
+                self.brands_dict = json.load(data_file)
+            with open('groups_dict.json') as data_file:
+                self.groups_dict = json.load(data_file)
+            with open('regions_dict.json') as data_file:
+                self.regions_dict = json.load(data_file)
             #+++++++++++++++++++++++++++++++++++++++++++++++
             #writer = pd.ExcelWriter('main_frame.xlsx')
             #self.main_frame.to_excel(writer, 'Sheet1')
 
             #writer.save()
 
+    def add_pretty_rows_and_columns_names(self,df):
 
-    def create_crosstab(self,f,field_to_save_slice,frame):#этот метод нужен чтобы делать кросстаб независимо от хитмапов
-        slice = getattr(self, field_to_save_slice)
+        slice_rows = self.slice_col1
+        slice_columns = self.slice_col2
+        list1 = list(getattr(self, slice_rows+"_dict"))#справочник1 для строк
+        list2 = list(getattr(self, slice_columns+"_dict"))#справочник2 для колонок
+
+        result = []
+        for i, val in enumerate(df.index):
+            result.append(list1[val])
+        df.index = result
+
+        result = []
+        for i, val in enumerate(df.columns):
+            result.append(list2[val])
+        df.columns = result
+
+        return df
+
+
+    def create_crosstab(self,f,frame):#этот метод нужен чтобы делать кросстаб независимо от хитмапов
+        slice = getattr(self, "slice_"+self.slice_col1+"_"+self.slice_col2)
         if slice.shape[0] == 0 and slice.shape[1] == 0:
             slice = f(frame)#разрез
-            setattr(self, field_to_save_slice, slice)
+            setattr(self, "slice_"+self.slice_col1+"_"+self.slice_col2, slice)
 
         return slice
 
-    def create_heatmap(self,plot_heatmap,f,plot_name, plot_size,field_to_save_slice):#по параметрам будем делать heatmap
+    def create_heatmap(self,plot_heatmap,f,plot_name, plot_size):#по параметрам будем делать heatmap
 
+        df = self.create_frame_for_plot(f)
 
-        df = self.create_frame_for_plot(f,field_to_save_slice)
+        df = self.add_pretty_rows_and_columns_names(df)
 
-        writer = pd.ExcelWriter(field_to_save_slice+'output.xlsx')
+        writer = pd.ExcelWriter("slice_"+self.slice_col1+"_"+self.slice_col2+'.xlsx')
         df.to_excel(writer, 'Sheet1')
 
         writer.save()
+        #можно отфильтровать только удачные из фрейма , затем crosstab по ним, затем приделываем имена колонок и строк и готов разрез в штуках по удачным
 
         plot_heatmap(df, plot_name, plot_size)
 
@@ -618,10 +722,9 @@ class Search_plots_factory():
         # r.groupby("Timestamp",'Brand','Group', as_index=False).count()#смотрим сколько каких сочетаний бренда и групп есть
         # дальше на основе этого будем смотреть что делать дальше!
 
-    def create_frame_for_plot(self,f,field_to_save_slice):
+    def create_frame_for_plot(self,f):
 
-        sliced_searches = self.create_crosstab(f, field_to_save_slice, self.main_frame)#разрез всего поисков
-
+        sliced_searches = self.create_crosstab(f,self.main_frame)#разрез всего поисков
 
 
         percentage_of_sucsess = pd.DataFrame(index=sliced_searches.index, columns=sliced_searches.columns.values)
@@ -632,7 +735,7 @@ class Search_plots_factory():
             # row_name = all_searches.index[i]
             for j in range(0, s[1], 1):  # по столбцам
 
-                row.append(self.fill_cell_value(sliced_searches,i,j,[field_to_save_slice]))
+                row.append(self.fill_cell_value(sliced_searches,i,j))
 
             percentage_of_sucsess.iloc[i] = row
 
@@ -651,12 +754,8 @@ class Search_plots_factory():
 
         df = self.main_frame[(self.main_frame[self.slice_col1] == row_name) & (self.main_frame[self.slice_col2] == col_name) & (self.main_frame["Search_result"] == 0)]
 
-        sucsess_in_cell = sliced_searches.iloc[i][j] - df.shape[0]
+        sucsess_in_cell = sliced_searches.iloc[i][j] - df.shape[0]#всего - неудачных
         """
-        not_sucsess_in_cell
-        удачных в клетке = sliced_searches.iloc[i][j] - всего поисков в клетке минус not_sucsess_in_cell
-
-
         sliced_searches.iloc[i][j](всего в клетке)- 100
         удачных в клетке  -  x%
         """
@@ -724,9 +823,9 @@ class Sales_plots_factory(Search_plots_factory):
 
 
         # cross tab срез по 3 м ситуациям, только для поисков завершенных продажей
-        self.slice_region_brand_2 = pd.DataFrame()
-        self.slice_region_group_2 = pd.DataFrame()
-        self.slice_brand_group_2 = pd.DataFrame()
+        self.slice_region_brand = pd.DataFrame()
+        self.slice_region_group = pd.DataFrame()
+        self.slice_brand_group = pd.DataFrame()
 
 
     def get_statistics_of_serches_and_sales(self):
@@ -766,13 +865,15 @@ class Sales_plots_factory(Search_plots_factory):
         """
 
 
-    def create_heatmap(self,plot_heatmap, f, plot_name, plot_size, field_to_save_slice):  # по параметрам будем делать heatmap
+    def create_heatmap(self,plot_heatmap, f, plot_name, plot_size):  # по параметрам будем делать heatmap
         #переопредедяем этот метод чтобы иметь отдельный кросстабы по срезам! они нужны для расчетов %
         #можно и делать по региону - бренду запросы в self.frame_searches_with_sales_only  для расчета % в функции fill_cell_value(для подсчета количества поисков в ячейке завершенных продажей)- но это может быть дольше
 
-        self.create_crosstab(f, field_to_save_slice + "_2",self.frame_searches_with_sales_only)  # делаем слайс по поискам завершенным продажей
+        self.create_crosstab(f, self.frame_searches_with_sales_only)  # делаем слайс по поискам завершенным продажей
 
-        df = self.create_frame_for_plot(f, field_to_save_slice)
+        df = self.create_frame_for_plot(f)
+
+        df = self.add_pretty_rows_and_columns_names(df)
 
         #todo можно удалить созданный field_to_save_slice + "_2" чтобы память не занимал
 
@@ -783,7 +884,7 @@ class Sales_plots_factory(Search_plots_factory):
         row_name = sliced_searches.index[i]
         col_name = sliced_searches.columns[j]
 
-        slice = getattr(self, list_additional_params[1]+"_2")#получаем разрез с поисками завершенными продажей из этого класса
+        slice = getattr(self, "slice_"+self.slice_col1+"_"+self.slice_col2)#получаем разрез с поисками завершенными продажей из этого класса
 
         percentage_of_saled_searches_in_cell = 0
 
@@ -791,11 +892,11 @@ class Sales_plots_factory(Search_plots_factory):
             if sliced_searches.iloc[i][j] == 0:#срез где все поиски!
                 percentage_of_saled_searches_in_cell = 0
 
-                assert (slice.loc[row_name][col_name] == 0),"Slice "+str(list_additional_params[1])+"_2"+" Not equal values in crosstab of all searches and in crosstab of serches ended with sales"
+                assert (slice.loc[row_name][col_name] == 0),"Slice "+"slice_"+self.slice_col1+"_"+self.slice_col2+" Not equal values in crosstab of all searches and in crosstab of serches ended with sales"
             else:
                 percentage_of_saled_searches_in_cell = (slice.loc[row_name][col_name]*100) / sliced_searches.iloc[i][j]
 
-                assert (slice.loc[row_name][col_name] != 0), "Slice " + str(list_additional_params[1]) + "_2" + " Not equal values in crosstab of all searches and in crosstab of serches ended with sales"
+                assert (slice.loc[row_name][col_name] != 0), "Slice " + "slice_"+self.slice_col1+"_"+self.slice_col2 + " Not equal values in crosstab of all searches and in crosstab of serches ended with sales"
 
         return percentage_of_saled_searches_in_cell
 
@@ -808,28 +909,32 @@ class Sales_plots_factory(Search_plots_factory):
 
 
 
-def region_brand(search_results):
+def region_brand(frame):
 
-    all_searches = pd.crosstab(search_results["Region"], search_results["Brand"])  # таблица по всем поискам
+    all_searches = pd.crosstab(frame["region"], frame["brand"])  # таблица по всем поискам
+
     #sucsess_searches = pd.crosstab(df_sucsess_searches.Region, df_sucsess_searches.Brand)  # таблица по удачным поискам
     #writer = pd.ExcelWriter('output.xlsx')
     #all_searches.to_excel(writer, 'Sheet1')
 
     #writer.save()
+    # добавить нормальные имена строк и колонок в соответствии с их id
+
+
 
     return all_searches
 
-def region_group(search_results):
+def region_group(frame):
 
-    all_searches = pd.crosstab(search_results["Region"], search_results["Group"])  # таблица по всем поискам
+    all_searches = pd.crosstab(frame["region"], frame["group"])  # таблица по всем поискам
     #sucsess_searches = pd.crosstab(df_sucsess_searches.Region, df_sucsess_searches.Group)  # таблица по удачным поискам
 
     return all_searches
 
 
-def brand_group(search_results):
+def brand_group(frame):
 
-    all_searches = pd.crosstab(search_results["Brand"], search_results["Group"])  # таблица по всем поискам
+    all_searches = pd.crosstab(frame["brand"], frame["group"])  # таблица по всем поискам
     #sucsess_searches = pd.crosstab(df_sucsess_searches.Brand, df_sucsess_searches.Group)  # таблица по удачным поискам
 
     return all_searches
