@@ -289,7 +289,7 @@ class Search_results_events(Base_Elastic):
 
                 if succsess_searches_count == 0 and empty_result == False:#ни одного - неудачный
                     #+1 к счету таких случаев
-                    if "2" not in self.goods_classifier[search_query]:#нет двойных брендов
+                    if search_query in self.goods_classifier and "not_one" not in self.goods_classifier[search_query]:#нет двойных брендов
 
                         brand2 = list(self.goods_classifier[search_query].keys())[0]
 
@@ -312,7 +312,7 @@ class Search_results_events(Base_Elastic):
                     #self.count3 += 1
                     #self.all_searches.loc[len(self.all_searches)] = [search_uid,timestamp, search_query, list(unique_brands)[0], region, list(unique_market_groups)[0],1]
                     #if len(self.goods_classifier[search_query]) == 1:
-                    if "2" not in self.goods_classifier[search_query]:  # нет двойных брендов
+                    if search_query in self.goods_classifier and "not_one" not in self.goods_classifier[search_query]:  # нет двойных брендов
                         #f = list(self.goods_classifier[search_query].keys())[0]
                         brand2 = list(self.goods_classifier[search_query].keys())[0]
 
@@ -464,6 +464,11 @@ def query_make3(list_of_args):
                     }
                 },
                 {
+                      "match": {
+                          "region": "Новосибирск"
+                      }
+                },
+                {
                     "exists" : { "field" : "results_groups.search_results.brand_name" }
                 },
                 {
@@ -591,6 +596,11 @@ class Search_plots_factory():
 
 
         df = self.create_frame_for_plot(f,field_to_save_slice)
+
+        writer = pd.ExcelWriter(field_to_save_slice+'output.xlsx')
+        df.to_excel(writer, 'Sheet1')
+
+        writer.save()
 
         plot_heatmap(df, plot_name, plot_size)
 
