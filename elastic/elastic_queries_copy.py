@@ -60,7 +60,7 @@ class Base_Elastic():
 
         while True:
             response = requests.post(elastic_url, data=query, verify=False, headers=headers)
-            if (response.status_code == 502):#, response.text.find("502 Bad Gateway") > 0
+            if (response.text.find("502 Bad Gateway") > 0):
                 print("Bad Gateway... REPEAT")
                 continue
             else:
@@ -107,7 +107,7 @@ class Base_Elastic():
 
             response = requests.post(elastic_url, data=query, verify=False, headers=headers)
             #time.sleep(5)
-            if (response.status_code == 502):#response.text.find("502 Bad Gateway") > 0
+            if (response.text.find("502 Bad Gateway") > 0):#response.status_code == 502
                 print("Bad Gateway... REPEAT")
                 continue
 
@@ -321,7 +321,8 @@ class Search_sales(Base_Elastic):
     def __init__(self,search_uids_list,from_timestamp):
 
         length = search_uids_list.shape[0]
-        self.search_uids_list = dict(zip(list(search_uids_list), [i for i in range(0, length)]))
+
+        self.search_uids_list = dict(zip(list(search_uids_list), [i for i in range(0,length)]))
         self.from_timestamp = from_timestamp
 
         self.sales = pd.DataFrame(columns=['Search_uid','Timestamp_of_sale','Sale'])
@@ -491,9 +492,6 @@ class Search_plots_factory():
         #todo пропустить весь главный фрейм через фильтр с нашими брендами!, там написаны в ручную имена товарных групп, надо как-то это делать вручную!
         #пока оставим как есть все!
         # todo надо будет делать чтобы уже сохраненные данные в файле не запрашивались, видимо time stamp, надо сохранить timestamp последнего документа!
-        #ищет бренд/группу - строка запроса, - результат в выдаче есть соответствующий его бренду/товарной группе и этот товар в наличии (это удачный поиск)
-        #ищет бренд/группу - строка запроса, - результат в выдаче есть соответствующий его бренду/товарной группе и этого товара не в наличии (это неудачный поиск)
-        # это значит что у неудачного поиска будет бренд и товарная группа! и в каждой ячейке мы будем брать за 100% все поиски в этой ячейке за 100%
 
         if from_db:
 
@@ -532,11 +530,6 @@ class Search_plots_factory():
             self.not_succsess_searches = special.iloc[0][1]
 
             self.main_frame = pd.read_csv('out.csv')
-            #+++++++++++++++++++++++++++++++++++++++++++++++
-            #writer = pd.ExcelWriter('main_frame.xlsx')
-            #self.main_frame.to_excel(writer, 'Sheet1')
-
-            #writer.save()
 
 
     def create_crosstab(self,f,field_to_save_slice,frame):#этот метод нужен чтобы делать кросстаб независимо от хитмапов
