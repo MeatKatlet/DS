@@ -2,6 +2,7 @@ import numpy as np
 import warnings
 import pandas as pd
 import json
+import collections
 
 class Frame_partial_reader():
 
@@ -10,6 +11,9 @@ class Frame_partial_reader():
         self.dublicates = 0
         self.dublicates2 = 0
         self.no_brand_or_group = 0
+        self.brands = collections.OrderedDict()
+        self.groups = collections.OrderedDict()
+
 
     def read(self,path):#это для фреймов больше 1000
         fp = open(path, encoding='utf-8')
@@ -33,7 +37,9 @@ class Frame_partial_reader():
                     self.no_brand_or_group += 1
                     continue
 
-                hex = str(hash(brand+group))
+
+
+                """
                 if oemnumber not in self.parse_result:
                     # d = dict()
                     # d['brand'] = brand
@@ -46,6 +52,30 @@ class Frame_partial_reader():
                         self.dublicates2 += 1  # хотим добавить еще один бренд или под существующим брендом еще одну товарную группу
                         self.parse_result[oemnumber]["not_one"] = 1
 
+                else:
+                    self.dublicates += 1
+                """
+                #hex = str(hash(brand + group))
+
+                if brand not in self.brands:
+
+                    # todo что делать с апострофом? в поиске выдача может быть вместе с ним
+                    brand = brand.replace(r"'", "").replace("\\","")
+                    self.brands[brand] = len(self.brands)
+                gs = group.strip()
+                if gs not in self.groups:
+
+                    self.groups[gs] = len(self.groups)
+
+                if oemnumber not in self.parse_result:
+                    #d = dict()
+                    #d['brand'] = brand
+                    #d['group'] = group
+                    self.parse_result[oemnumber] = {}
+                    self.parse_result[oemnumber][(self.brands[brand],self.groups[gs])] = 0#в виде чисел будет ключ (код бренда, код группы)
+
+                elif oemnumber in self.parse_result:
+                    self.parse_result[oemnumber][(self.brands[brand],self.groups[gs])] = 0#в виде чисел будет ключ (код бренда, код группы)
                 else:
                     self.dublicates += 1
 
