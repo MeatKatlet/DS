@@ -280,7 +280,10 @@ class Search_results_events(Base_Elastic):
                                         succsess_searches_count += 1
                                         #brands.append(brand)
                                         #market_groups.append(group)
-                                        brand_group_variants[(self.brands_dict[brand],self.groups_dict[group])] = 0
+                                        if (self.brands_dict[brand],self.groups_dict[group]) not in brand_group_variants:
+                                            brand_group_variants[(self.brands_dict[brand],self.groups_dict[group])] = 1
+                                        else:
+                                            brand_group_variants[(self.brands_dict[brand], self.groups_dict[group])] += 1
                                         #df.loc[len(df)] = [brand,group]
 
 
@@ -290,7 +293,11 @@ class Search_results_events(Base_Elastic):
                                         #df.loc[len(df)] = [brand, group]
                                         #brands.append(brand)
                                         #market_groups.append(group)
-                                        brand_group_variants[(self.brands_dict[brand], self.groups_dict[group])] = 0
+
+                                        if (self.brands_dict[brand],self.groups_dict[group]) not in brand_group_variants:
+                                            brand_group_variants[(self.brands_dict[brand],self.groups_dict[group])] = 1
+                                        else:
+                                            brand_group_variants[(self.brands_dict[brand], self.groups_dict[group])] += 1
 
 
                 #unique_brands = set(brands)
@@ -299,13 +306,13 @@ class Search_results_events(Base_Elastic):
                 #if succsess_searches_count2 > 0:
                     #self.not_succsess2 += 1
 
-                if succsess_searches_count == 0 and empty_result == False:#ни одного - неудачный
+                if succsess_searches_count == 0 and empty_result == False:#ни одного - неудачный + непустые выдачи были
 
                     if search_query in self.goods_classifier:#искал то что у нас есть обычно(может быть в принципе)!
                         #либо юзер подразумевал сразу несколько сочетаний брендов и групп, которые ищет
                         if len(self.goods_classifier[search_query])>1:
-                            #todo какой бренд/группу брать?
-                            self.not_founded_several_brands += 1#4767
+                            #todo какой бренд/группу брать? может это число можно сократить узная по переходам на карточки товара из предварительной выдачи?
+                            self.not_founded_several_brands += 1#5379 - не было совпадений в выдаче с тем что подразумевается под номером детали(совпадений с наличием?)
                         # либо одно сочетание бренда группы которое ищет
                         elif len(self.goods_classifier[search_query])==1:#т.е. то что не нашел то и записываем в ответ
                             brand_code = list(self.goods_classifier[search_query].keys())[0][0]
@@ -320,8 +327,8 @@ class Search_results_events(Base_Elastic):
                                 0
                             ]
 
-                    else:
-                        self.not_founded_out_of_articles_range += 1#15484
+                    else:#такого запроса нет в классификаторе!
+                        self.not_founded_out_of_articles_range += 1#17523
 
 
                 elif succsess_searches_count == 1 and len(brand_group_variants)==1:#одно совпадение но с одним и тем же
@@ -329,7 +336,7 @@ class Search_results_events(Base_Elastic):
                     # либо юзер подразумевал сразу несколько сочетаний брендов и групп, которые ищет
                     if len(self.goods_classifier[search_query])>1:#подразумевал несколько сочетаний а нашел 1 совпадение из подразумеваемых с выжачей
                         #todo какой бренд/группу брать для этого? правильно ли я сделал, ведь юзер подразумевает несколько сочетаний
-                        #получается те которые нашел!
+                        #получается те которые нашел!, совпал 1 раз по наличию со списком подразумеваемого
 
                         brand_code = list(brand_group_variants.keys())[0][0]
                         group_code = list(brand_group_variants.keys())[0][1]
@@ -530,9 +537,9 @@ def query_make3(list_of_args):
                     }
                 },
                 {
-                      "match": {
+                     "match": {
                           "region": "Новосибирск"
-                      }
+                     }
                 },
                 {
                     "exists" : { "field" : "results_groups.search_results.brand_name" }
@@ -546,6 +553,13 @@ def query_make3(list_of_args):
     }
     return query
 
+"""
+                {
+                      "match": {
+                          "region": "Новосибирск"
+                      }
+                },
+"""
 def query_make4(list_of_args):
     if len(list_of_args)==1:
         gt = list_of_args[0]  # базовый timestamp будет добавлять
@@ -638,28 +652,28 @@ class Search_plots_factory():
             #special.to_csv('special.csv')#сохранить в файл
 
             #self.draw_statistics(search_results)
-            #todo уметь сохранять справочники с именами городоа, брендов, товарных групп, и приделывать эти имена к результирующей таблице!
+
 
             self.main_frame.to_csv('out.csv')
 
-            with open('brands_dict.json', 'w') as fp:
-                json.dump(self.brands_dict, fp)
-            with open('groups_dict.json', 'w') as fp:
-                json.dump(self.groups_dict, fp)
-            with open('regions_dict.json', 'w') as fp:
-                json.dump(self.regions_dict, fp)
+            with open('brand_dict.json', 'w') as fp:
+                json.dump(self.brand_dict, fp)
+            with open('group_dict.json', 'w') as fp:
+                json.dump(self.group_dict, fp)
+            with open('region_dict.json', 'w') as fp:
+                json.dump(self.region_dict, fp)
 
         else:
             #special = pd.read_csv('special.csv')
             #self.not_succsess_searches = special.iloc[0][1]
 
             self.main_frame = pd.read_csv('out.csv')
-            with open('brands_dict.json') as data_file:
-                self.brands_dict = json.load(data_file)
-            with open('groups_dict.json') as data_file:
-                self.groups_dict = json.load(data_file)
-            with open('regions_dict.json') as data_file:
-                self.regions_dict = json.load(data_file)
+            with open('brand_dict.json') as data_file:
+                self.brand_dict = json.load(data_file)
+            with open('group_dict.json') as data_file:
+                self.group_dict = json.load(data_file)
+            with open('region_dict.json') as data_file:
+                self.region_dict = json.load(data_file)
             #+++++++++++++++++++++++++++++++++++++++++++++++
             #writer = pd.ExcelWriter('main_frame.xlsx')
             #self.main_frame.to_excel(writer, 'Sheet1')
@@ -705,6 +719,14 @@ class Search_plots_factory():
 
         writer.save()
         #можно отфильтровать только удачные из фрейма , затем crosstab по ним, затем приделываем имена колонок и строк и готов разрез в штуках по удачным
+        s = self.main_frame.query("Search_result == 1")
+        s2 = pd.crosstab(s[self.slice_col1],s[self.slice_col2])
+        s2 = self.add_pretty_rows_and_columns_names(s2)#разрез в абсолютных величинах по удачным
+
+        writer = pd.ExcelWriter("slice_absolute" + self.slice_col1 + "_" + self.slice_col2 + '.xlsx')
+        df.to_excel(writer, 'Sheet1')
+        writer.save()
+
 
         plot_heatmap(df, plot_name, plot_size)
 
@@ -744,17 +766,18 @@ class Search_plots_factory():
 
     def fill_cell_value(self, sliced_searches,i,j,list_additional_params=list()):
         #sum = list_additional_params[0]
-        if sliced_searches.iloc[i][j]==0:
+        row_name = sliced_searches.index[i]
+        col_name = sliced_searches.columns[j]
+        if sliced_searches.loc[row_name][col_name]==0:
             return 0
 
         #делаем запрос в main_frame по неудачным поискам в регионе, бренде
-        row_name = sliced_searches.index[i]
-        col_name = sliced_searches.columns[j]
+
 
 
         df = self.main_frame[(self.main_frame[self.slice_col1] == row_name) & (self.main_frame[self.slice_col2] == col_name) & (self.main_frame["Search_result"] == 0)]
 
-        sucsess_in_cell = sliced_searches.iloc[i][j] - df.shape[0]#всего - неудачных
+        sucsess_in_cell = sliced_searches.loc[row_name][col_name] - df.shape[0]#всего - неудачных
         """
         sliced_searches.iloc[i][j](всего в клетке)- 100
         удачных в клетке  -  x%
@@ -775,7 +798,7 @@ class Search_plots_factory():
 
         #percentage_in_cell = (sliced_searches.iloc[i][j] * 100) / (sum + self.not_succsess_searches)
 
-        percentage_in_cell = (sucsess_in_cell * 100) / (sliced_searches.iloc[i][j])
+        percentage_in_cell = (sucsess_in_cell * 100) / (sliced_searches.loc[row_name][col_name])
 
         # if percentage_in_cell>0:
         #   percentage_in_cell = 1
