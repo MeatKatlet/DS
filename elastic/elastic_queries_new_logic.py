@@ -120,9 +120,13 @@ class Base_Elastic():
             # tsmp = df["_source.search_timestamp"].max()
 
             l = len(deserilised["hits"]["hits"])
+            if l>0:
+                k = l - 1
 
-            # last_tsmp = response['_source.'+timestampe_field_name]
-            last_tsmp = deserilised["hits"]["hits"][l - 1]["_source"]["timestamp"]
+                # last_tsmp = response['_source.'+timestampe_field_name]
+                last_tsmp = deserilised["hits"]["hits"][k]["_source"]["timestamp"]
+            else:
+                break
             scroll_size = scroll_size - size
             # print(str(((int(total_size) - int(scroll_size)) / int(total_size)) * 100) + "%")
             if (int(scroll_size) <= 0):
@@ -430,7 +434,7 @@ class Search_sales(Base_Elastic):
 
         self.from_timestamp = from_timestamp
 
-        self.sales = pd.DataFrame(columns=['Search_uid','Timestamp_of_sale','Sale'])
+        self.sales = pd.DataFrame(columns=['Search_uid_sales','Timestamp_of_sale','Sale'])
 
         self.sales_without_searches = pd.DataFrame(columns=['Search_uid','Timestamp_of_sale','Sale'])
 
@@ -451,7 +455,7 @@ class Search_sales(Base_Elastic):
                 self.sales.loc[len(self.sales)] = [sale["_source"]["search_uid"],sale["_source"]["timestamp"],1]
             else:
                 self.sales_without_searches.loc[len(self.sales_without_searches)] = [sale["_source"]["search_uid"],sale["_source"]["timestamp"],1]
-
+                #запросить события с такими id с чего они начались эти продажи?пройтись циклом и посчитать количество событий продаж
 
         #составим список, присоединим потом к фрейму
 
@@ -578,6 +582,11 @@ def query_make4(list_of_args):
                      "match": {
                         "event": "checkout"
                      }
+                 },
+                 {
+                     "match": {
+                         "region": "Новосибирск"
+                     }
                  }
              ]
          }
@@ -586,7 +595,87 @@ def query_make4(list_of_args):
 
 
 
+"""
+brands_list = []
 
+def build_query():
+    q = [
+
+        {
+            "bool": {
+                "must": [
+                    {
+                        "match": {
+                            "results_groups.search_results.brand_name": "имя бренда"
+                        }
+                    },
+                    {
+                        "match": {
+                            "results_groups.search_results.market_group_name": "имя маркетинговой группы"
+                        }
+                    }
+                ]
+            }
+
+        },
+
+        {
+            "match": {
+                "results_groups.search_results.brand_name": "имя маркетинговой группы"
+            }
+        }
+
+    ]
+    return q
+def query_make5(list_of_args):
+    global brands_list
+    if len(list_of_args)==0:
+        gt = 10
+    else:
+        gt = list_of_args[0]
+
+    if len(brands_list)==0:
+        brands_list = build_query()
+
+
+    query = {
+       "bool": {
+              "must": [
+                {"range": {"timestamp": {"gt": gt}}},
+                {
+                    "match": {
+                        "is_internal_user": False
+                    }
+                },
+                {
+                    "match": {
+                        "event": "search"
+                    }
+                },
+                {
+                     "match": {
+                          "region": "Новосибирск"
+                     }
+                },
+                {
+                    "exists" : { "field" : "results_groups.search_results.brand_name" }
+                },
+                {
+                    "exists" : { "field" : "results_groups.search_results.market_group_name" }
+                },
+                {
+                    "bool": {
+                          "should": brands_list,
+                          "minimum_should_match": 1
+                      }
+                }
+
+              ]
+
+       }
+    }
+    return query
+"""
 
 
 
@@ -605,9 +694,13 @@ class Search_plots_factory():
         self.slice_col2 = ""
 
         self.not_succsess_searches = 0
+        self.brand_dict = []#todo нужно разобраться с тем почему не доступно в классе наследнике и приходится через передачу объекта родителя в конструктор присваивать значения атрибутам
+        self.group_dict = []
+        self.region_dict = []
 
 
-    def get_main_dataframe(self, from_db=True):#получает главный фрейм из бд или файла и сохраняет его в атрибут класса, для дальнейшего доступа к нему откуда угодно
+
+    def get_main_dataframe(self, only_our_brands=False,from_db=True):#получает главный фрейм из бд или файла и сохраняет его в атрибут класса, для дальнейшего доступа к нему откуда угодно
 
         #todo пропустить весь главный фрейм через фильтр с нашими брендами!, там написаны в ручную имена товарных групп, надо как-то это делать вручную!
         #пока оставим как есть все!
@@ -622,6 +715,8 @@ class Search_plots_factory():
 
 
         if from_db:
+            # todo из файла получать только наши бренды!
+
 
             """
                    # 0. пробуем базовый Elastic
@@ -679,6 +774,7 @@ class Search_plots_factory():
             #self.main_frame.to_excel(writer, 'Sheet1')
 
             #writer.save()
+            #todo из фрейма фильтровать ьлдбко наши бренды!
 
     def add_pretty_rows_and_columns_names(self,df):
 
@@ -721,14 +817,16 @@ class Search_plots_factory():
         #можно отфильтровать только удачные из фрейма , затем crosstab по ним, затем приделываем имена колонок и строк и готов разрез в штуках по удачным
         s = self.main_frame.query("Search_result == 1")
         s2 = pd.crosstab(s[self.slice_col1],s[self.slice_col2])
+        s2 = s2.loc[(s2 != 0).any(axis=1)]
+        s2 = s2.loc[:, (s2 != 0).any(axis=0)]
         s2 = self.add_pretty_rows_and_columns_names(s2)#разрез в абсолютных величинах по удачным
 
-        writer = pd.ExcelWriter("slice_absolute" + self.slice_col1 + "_" + self.slice_col2 + '.xlsx')
-        df.to_excel(writer, 'Sheet1')
+        writer = pd.ExcelWriter("slice_absolute_" + self.slice_col1 + "_" + self.slice_col2 + '.xlsx')
+        s2.to_excel(writer, 'Sheet1')
         writer.save()
 
 
-        plot_heatmap(df, plot_name, plot_size)
+        #plot_heatmap(df, plot_name, plot_size)
 
 
     def draw_statistics(self,search_results):
@@ -746,7 +844,7 @@ class Search_plots_factory():
 
     def create_frame_for_plot(self,f):
 
-        sliced_searches = self.create_crosstab(f,self.main_frame)#разрез всего поисков
+        sliced_searches = self.create_crosstab(f,self.main_frame)#разрез всего  поисков
 
 
         percentage_of_sucsess = pd.DataFrame(index=sliced_searches.index, columns=sliced_searches.columns.values)
@@ -816,39 +914,62 @@ class Sales_plots_factory(Search_plots_factory):
         #1530813106 - это самый ранний timestamp
         if from_db:
             # делаем запрос на продажи
-            sales = Search_sales(self.main_frame["Search_uid"], self.main_frame.iloc[0][2])#ранний timestamp записали
+            df = self.main_frame
+            sales = Search_sales(df["Search_uid"], self.main_frame.iloc[0][2])#ранний timestamp записали todo когда из файла извлечено то лишняя колонка?
             q = query_make4
             sales.get_data(q, search_plots_factory.index, search_plots_factory.timestampe_field_name,size=1000)
 
-            #проверить на уникальность все значения индекса!
-            l1 = len(self.main_frame['Search_uid'].unique())
+
+            """
+                #проверить на уникальность все значения индекса!
+            l1 = len(df['Search_uid'].unique())
             l2 = len(sales.sales['Search_uid'].unique())
-            if l1 != self.main_frame.shape[0] or l2 != sales.sales.shape[0]:
+            if l1 != df.shape[0] or l2 != sales.sales.shape[0]:
                 exit(1)
+            """
+            # удачные с продажей
+            # удачные без продажи
+            # неудачные с продажей
+            # неудачные без продажи
+            self.main_frame.isnull().any().any()
+            #self.main_frame.set_index('Search_uid')
+            #sales.sales.set_index('Search_uid')
+            #todo есть неуникальные Search_uid и Search_uid_sales, и продаж без поисков у нас 38000 а с поисками 23000
+            #self.frame_all_searches_with_sales = pd.concat([self.main_frame, sales.sales], axis=1, sort=False)#и удачные и неудачные для самопроверки!
+            self.frame_all_searches_with_sales =  self.main_frame.merge(sales.sales, how='left', left_on='Search_uid', right_on='Search_uid_sales')
+            self.frame_all_searches_with_sales.fillna(0, inplace=True)#в файл
+            self.frame_all_searches_with_sales.to_csv("frame_all_searches_with_sales.csv")#frame_all_searches_with_sales.csv
 
-            self.main_frame.set_index('Search_uid')
-            sales.sales.set_index('Search_uid')
-
-            self.frame_searches_with_sales = pd.concat([self.main_frame, sales.sales], axis=1, sort=False)
-            self.frame_searches_with_sales.fillna(0)#в файл
-            self.frame_searches_with_sales.to_csv("frame_searches_with_sales.csv")
-
-            self.sales_without_searches = sales.sales_without_searches#в файл
+            self.sales_without_searches = sales.sales_without_searches#продажи вне диапазона id поисков, у них цепочки не начались с поисков!
             self.sales_without_searches.to_csv("sales_without_searches.csv")
         else:
-            self.frame_searches_with_sales = pd.read_csv('frame_searches_with_sales.csv')
+            self.frame_all_searches_with_sales = pd.read_csv('frame_all_searches_with_sales.csv')#frame_all_searches_with_sales.csv
+            # продажи без поисков вообще
             self.sales_without_searches = pd.read_csv('sales_without_searches.csv')
 
 
+        # удачные с продажей
+        self.frame_sucsess_searches_with_sales = self.frame_all_searches_with_sales.query("Search_result == 1 & Sale == 1")#чтобы это здесь было нужно чтобы в файле уже было проведено объединение
+        # удачные без продажи
+        self.frame_sucsess_searches_without_sales = self.frame_all_searches_with_sales.query("Search_result == 1 & Sale == 0")
+        # неудачные с продажей
+        self.frame_not_sucsess_searches_with_sales = self.frame_all_searches_with_sales.query("Search_result == 0 & Sale == 1")
+        # неудачные без продажи
+        self.frame_not_sucsess_searches_without_sales = self.frame_all_searches_with_sales.query("Search_result == 0 & Sale == 0")
 
 
-        self.frame_searches_with_sales_only = self.frame_searches_with_sales.query("Sale == 1")#чтобы это здесь было нужно чтобы в файле уже было проведено объединение
 
 
         # cross tab срез по 3 м ситуациям, только для поисков завершенных продажей
         self.slice_region_brand = pd.DataFrame()
         self.slice_region_group = pd.DataFrame()
         self.slice_brand_group = pd.DataFrame()
+
+        self.region_dict = search_plots_factory.region_dict
+        self.brand_dict = search_plots_factory.brand_dict
+        self.group_dict = search_plots_factory.group_dict
+
+
 
 
     def get_statistics_of_serches_and_sales(self):
@@ -857,22 +978,43 @@ class Sales_plots_factory(Search_plots_factory):
         #% поисков без продаж
         #% не было выдачи + не было продажи(в корзину положили но не купили?)
 
+        #удачные с продажей
+        #удачные без продажи
+        #неудачные с продажей
+        #неудачные без продажи
+
+        #продажа без поисков
+
         #пока только 3 типа
-        without_sales = self.main_frame.query("Sale == 0")
-        all_chains = self.sales_without_searches.shape[0] + without_sales.shape[0] + self.frame_searches_with_sales_only.shape[0]
+        #without_sales = self.frame_searches_with_sales.query("Sale == 0")
+        #all_chains = self.sales_without_searches.shape[0] + without_sales.shape[0] + self.frame_searches_with_sales_only.shape[0]
+        all_chains = self.frame_sucsess_searches_with_sales.shape[0] + self.frame_sucsess_searches_without_sales.shape[0] + self.frame_not_sucsess_searches_with_sales.shape[0] + self.frame_not_sucsess_searches_without_sales.shape[0] + self.sales_without_searches.shape[0]
 
-        percent1 = (self.sales_without_searches.shape[0]*100)/all_chains #% продаж без поисков.
-        percent2 = (without_sales.shape[0]*100)/all_chains#% поисков без продаж
-        percent3 = (self.frame_searches_with_sales_only.shape[0]*100)/all_chains#% поисков с продажами
+        percent1 = (self.frame_sucsess_searches_with_sales.shape[0] * 100) / all_chains # удачные с продажей
+        percent2 = (self.frame_sucsess_searches_without_sales.shape[0] * 100) / all_chains# удачные без продажи
+        percent3 = (self.frame_not_sucsess_searches_with_sales.shape[0] * 100) / all_chains# неудачные с продажей
+        percent4 = (self.frame_not_sucsess_searches_without_sales.shape[0] * 100) / all_chains# неудачные без продажи
+        percent5 = (self.sales_without_searches.shape[0] * 100) / all_chains# продаж без поисков вообще
 
-        labels = 'продаж без поисков', 'поисков без продаж', 'поисков с продажами'
-        fracs = [percent1, percent2, percent3]
+
+
+        #percent1 = (self.sales_without_searches.shape[0]*100)/all_chains #% продаж без поисков.
+        #percent2 = (without_sales.shape[0]*100)/all_chains#% поисков без продаж
+        #percent3 = (self.frame_searches_with_sales_only.shape[0]*100)/all_chains#% поисков с продажами
+
+        labels = 'удачные с продажей', 'удачные без продажи', 'неудачные с продажей','неудачные без продажи','продаж без поисков вообще'
+        fracs = [percent1, percent2, percent3,percent4,percent5]
 
         plt.pie(fracs, labels=labels, autopct='%1.1f%%', shadow=False)
         plt.title('Виды цепочек действий пользователей')
         plt.show()
 
-        print([self.sales_without_searches.shape[0],without_sales.shape[0],self.frame_searches_with_sales_only])
+        print([self.frame_sucsess_searches_with_sales.shape[0],
+               self.frame_sucsess_searches_without_sales.shape[0],
+               self.frame_not_sucsess_searches_with_sales.shape[0],
+               self.frame_not_sucsess_searches_without_sales.shape[0],
+               self.sales_without_searches.shape[0]
+               ])
         """
         values = np.arange(0, 100, step=5)
         colors = plt.cm.BuPu(np.linspace(0, 0.5, 3))
@@ -887,37 +1029,67 @@ class Sales_plots_factory(Search_plots_factory):
         plt.show()
         """
 
+    def create_frame_for_plot(self,f):
+
+        sliced_searches = self.create_crosstab(f,self.frame_all_searches_with_sales.query("Search_result == 1"))#разрез всего удачных поисков
+
+
+        percentage_of_sucsess = pd.DataFrame(index=sliced_searches.index, columns=sliced_searches.columns.values)
+
+        s = sliced_searches.shape
+        for i in range(0, s[0], 1):  # по строкам
+            row = []
+            # row_name = all_searches.index[i]
+            for j in range(0, s[1], 1):  # по столбцам
+
+                row.append(self.fill_cell_value(sliced_searches,i,j))
+
+            percentage_of_sucsess.iloc[i] = row
+
+
+        return percentage_of_sucsess
 
     def create_heatmap(self,plot_heatmap, f, plot_name, plot_size):  # по параметрам будем делать heatmap
         #переопредедяем этот метод чтобы иметь отдельный кросстабы по срезам! они нужны для расчетов %
         #можно и делать по региону - бренду запросы в self.frame_searches_with_sales_only  для расчета % в функции fill_cell_value(для подсчета количества поисков в ячейке завершенных продажей)- но это может быть дольше
 
-        self.create_crosstab(f, self.frame_searches_with_sales_only)  # делаем слайс по поискам завершенным продажей
+        self.create_crosstab(f, self.frame_sucsess_searches_with_sales)  #todo делаем слайс по удачным поискам завершенным продажей, сохраняем в атрибут
 
         df = self.create_frame_for_plot(f)
 
         df = self.add_pretty_rows_and_columns_names(df)
 
-        #todo можно удалить созданный field_to_save_slice + "_2" чтобы память не занимал
+        writer = pd.ExcelWriter("slice_sales_" + self.slice_col1 + "_" + self.slice_col2 + '.xlsx')
+        df.to_excel(writer, 'Sheet1')
 
-        plot_heatmap(df, plot_name, plot_size)
+        writer.save()
+        # можно отфильтровать только удачные из фрейма , затем crosstab по ним, затем приделываем имена колонок и строк и готов разрез в штуках по удачным
+        s = self.frame_sucsess_searches_with_sales# в абсолютных числах происки завершенные продажей
+        s2 = pd.crosstab(s[self.slice_col1], s[self.slice_col2])
+        s2 = self.add_pretty_rows_and_columns_names(s2)  # разрез в абсолютных величинах по удачным
+
+        writer = pd.ExcelWriter("slice_sales_absolute_" + self.slice_col1 + "_" + self.slice_col2 + '.xlsx')
+        s2.to_excel(writer, 'Sheet1')
+        writer.save()
+
+        #plot_heatmap(df, plot_name, plot_size)
 
 
     def fill_cell_value(self, sliced_searches, i, j, list_additional_params=list()):#логика для каждой ячейки будет описана здесь!
         row_name = sliced_searches.index[i]
         col_name = sliced_searches.columns[j]
 
-        slice = getattr(self, "slice_"+self.slice_col1+"_"+self.slice_col2)#получаем разрез с поисками завершенными продажей из этого класса
+        slice = getattr(self, "slice_"+self.slice_col1+"_"+self.slice_col2)#получаем разрез с удачными поисками завершенными продажей из этого класса
 
         percentage_of_saled_searches_in_cell = 0
 
-        if row_name in slice.index and col_name in slice.columns:
-            if sliced_searches.iloc[i][j] == 0:#срез где все поиски!
+        if row_name in slice.index and col_name in slice.columns:#если есть то в поисках завершенных продажей такая строка колонк аесть
+            if sliced_searches.iloc[row_name][col_name] == 0:#срез где все удачные поиски!
                 percentage_of_saled_searches_in_cell = 0
 
                 assert (slice.loc[row_name][col_name] == 0),"Slice "+"slice_"+self.slice_col1+"_"+self.slice_col2+" Not equal values in crosstab of all searches and in crosstab of serches ended with sales"
             else:
-                percentage_of_saled_searches_in_cell = (slice.loc[row_name][col_name]*100) / sliced_searches.iloc[i][j]
+                percentage_of_saled_searches_in_cell = (slice.loc[row_name][col_name]*100) / sliced_searches.iloc[row_name][col_name]
 
                 assert (slice.loc[row_name][col_name] != 0), "Slice " + "slice_"+self.slice_col1+"_"+self.slice_col2 + " Not equal values in crosstab of all searches and in crosstab of serches ended with sales"
 
@@ -942,7 +1114,8 @@ def region_brand(frame):
 
     #writer.save()
     # добавить нормальные имена строк и колонок в соответствии с их id
-
+    all_searches = all_searches.loc[(all_searches != 0).any(axis=1)]
+    all_searches = all_searches.loc[:, (all_searches != 0).any(axis=0)]
 
 
     return all_searches
@@ -951,7 +1124,8 @@ def region_group(frame):
 
     all_searches = pd.crosstab(frame["region"], frame["group"])  # таблица по всем поискам
     #sucsess_searches = pd.crosstab(df_sucsess_searches.Region, df_sucsess_searches.Group)  # таблица по удачным поискам
-
+    all_searches = all_searches.loc[(all_searches != 0).any(axis=1)]
+    all_searches = all_searches.loc[:, (all_searches != 0).any(axis=0)]
     return all_searches
 
 
@@ -959,7 +1133,8 @@ def brand_group(frame):
 
     all_searches = pd.crosstab(frame["brand"], frame["group"])  # таблица по всем поискам
     #sucsess_searches = pd.crosstab(df_sucsess_searches.Brand, df_sucsess_searches.Group)  # таблица по удачным поискам
-
+    all_searches = all_searches.loc[(all_searches != 0).any(axis=1)]
+    all_searches = all_searches.loc[:, (all_searches != 0).any(axis=0)]
     return all_searches
 
 

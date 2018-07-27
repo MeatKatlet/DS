@@ -167,7 +167,7 @@ def main():
 
     search_plots_factory = elastic.elastic_queries_new_logic.Search_plots_factory()
 
-    search_plots_factory.get_main_dataframe(True)#надо сделать чтобы лидо запрос из бд, и результатом будет фрейм, который мы сохраняем в файл, либо считываем из файла фрейм
+    search_plots_factory.get_main_dataframe(from_db=False)#надо сделать чтобы лидо запрос из бд, и результатом будет фрейм, который мы сохраняем в файл, либо считываем из файла фрейм
     #по каждому сочетанию сделать heatmap
     """
     география - бренды
@@ -209,43 +209,45 @@ def main():
 
 
 
-    #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    f = elastic.elastic_queries_new_logic.region_brand
-    search_plots_factory.slice_col1 = "region"
-    search_plots_factory.slice_col2 = "brand"
-    search_plots_factory.create_heatmap(plot_heatmap, f,'% удачных поисков. Регион vs Бренд',(31, 22))
 
 
-    #++++++++++++++++++++++
-    f = elastic.elastic_queries_new_logic.region_group
-    search_plots_factory.slice_col1 = "region"
-    search_plots_factory.slice_col2 = "group"
-    search_plots_factory.create_heatmap(plot_heatmap, f, '% удачных поисков. Регион vs Товарная группа',(90, 22))
-
-    #+++++++++++++++++++++++++++++++++
-    f = elastic.elastic_queries_new_logic.brand_group
-    search_plots_factory.slice_col1 = "brand"
-    search_plots_factory.slice_col2 = "group"
-    search_plots_factory.create_heatmap(plot_heatmap, f,'% удачных поисков, Бренд vs Товарная группа',(90, 44))
-
-
+    """
+     #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        f = elastic.elastic_queries_new_logic.region_brand
+        search_plots_factory.slice_col1 = "region"
+        search_plots_factory.slice_col2 = "brand"
+        search_plots_factory.create_heatmap(plot_heatmap, f,'% удачных поисков. Регион vs Бренд',(31, 22))
+    
+    
+        #++++++++++++++++++++++
+        f = elastic.elastic_queries_new_logic.region_group
+        search_plots_factory.slice_col1 = "region"
+        search_plots_factory.slice_col2 = "group"
+        search_plots_factory.create_heatmap(plot_heatmap, f, '% удачных поисков. Регион vs Товарная группа',(90, 22))
+    
+        #+++++++++++++++++++++++++++++++++
+        f = elastic.elastic_queries_new_logic.brand_group
+        search_plots_factory.slice_col1 = "brand"
+        search_plots_factory.slice_col2 = "group"
+        search_plots_factory.create_heatmap(plot_heatmap, f,'% удачных поисков, Бренд vs Товарная группа',(90, 44))
+    """
     #теперь построим хитмапы на по % поисков завершенных продажами в 3 разрезах тоже
 
     sales_plots_factory = elastic.elastic_queries_new_logic.Sales_plots_factory(search_plots_factory, True)
 
     sales_plots_factory.get_statistics_of_serches_and_sales()
-
+    f = elastic.elastic_queries_new_logic.region_brand
     sales_plots_factory.slice_col1 = "region"
     sales_plots_factory.slice_col2 = "brand"
-    sales_plots_factory.create_heatmap(plot_heatmap,"none",'% поисков завершенных продажей. Регион vs Бренд',(30, 22))
-
+    sales_plots_factory.create_heatmap(plot_heatmap,f,'% поисков завершенных продажей. Регион vs Бренд',(30, 22))#это % из удачных поисков завершенных продажей
+    f = elastic.elastic_queries_new_logic.region_group
     sales_plots_factory.slice_col1 = "region"
     sales_plots_factory.slice_col2 = "group"
-    sales_plots_factory.create_heatmap(plot_heatmap,"none", '% поисков завершенных продажей. Регион vs Товарная группа',(90, 22))
-
+    sales_plots_factory.create_heatmap(plot_heatmap,f, '% поисков завершенных продажей. Регион vs Товарная группа',(90, 22))
+    f = elastic.elastic_queries_new_logic.brand_group
     sales_plots_factory.slice_col1 = "brand"
     sales_plots_factory.slice_col2 = "group"
-    sales_plots_factory.create_heatmap(plot_heatmap,"none",'% поисков завершенных продажей. Бренд vs Товарная группа',(90, 44))
+    sales_plots_factory.create_heatmap(plot_heatmap,f,'% поисков завершенных продажей. Бренд vs Товарная группа',(90, 44))
 
     a = 1
 
