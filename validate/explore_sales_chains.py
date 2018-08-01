@@ -134,7 +134,7 @@ class Serches_in_sales_chains(Base_Elastic):
 
             if "region" in hit:
                 region = hit["region"]
-                have_region = 1
+                have_region += 1
                 #if region not in self.regions_dict:
                 #    self.regions_dict[region] = len(self.regions_dict)
 
@@ -152,7 +152,7 @@ class Serches_in_sales_chains(Base_Elastic):
 
 
                 if length2 == 0:
-                    results_groups = 1
+                    results_groups += 1
 
 
                 for k in range(0, length2,1):  # по всем элементам results_groups, в каждом элементе один атрибут search_results
@@ -161,7 +161,7 @@ class Serches_in_sales_chains(Base_Elastic):
                     length3 = len(results_group_item["search_results"])
 
                     if length3==0:
-                        search_results = +1
+                        search_results += 1
 
 
                     for j in range(0, length3, 1):
@@ -238,25 +238,53 @@ class Explore_sales_chains():
         search_events_worker.get_data(q, self.index, self.timestampe_field_name)
 
 
-        search_events_worker.types_of_results
+        #search_events_worker.types_of_results
 
+        """
+        have_region,
+        results_groups,
+        search_results,
+        availably,
+        brand_group_have_names,
+        query_dictionary_brand_group_overlap,
+        local_store,
+        succsess_searches_count
+        """
+        f = search_events_worker.types_of_results
         #сколько выдач когда нет региона
+        x1 = f[(f["have_region"] == 0)].shape[0]
+        #f[(f["have_region"] == 0) & (f[self.slice_col2] == col_name) & (f["Search_result"] == 0)]
 
         #сколько выдач когда есть регион
+        x2 = f[(f["have_region"] > 0)].shape[0]
             #из них когда results_groups > 0
+        x3 = f[(f["have_region"] > 0) & (f["results_groups"]>0)].shape[0]
                 #из них когда search_results >0
+        x5 = f[(f["have_region"] > 0) & (f["results_groups"] > 0) & (f["search_results"] > 0)].shape[0]
                     #из них когда availably > 0
+        x7 = f[(f["have_region"] > 0) & (f["results_groups"] > 0) & (f["search_results"] > 0) & (f["availably"] > 0)].shape[0]
                         #из них когда brand_group_have_names > 0
+        x9 = f[(f["have_region"] > 0) & (f["results_groups"] > 0) & (f["search_results"] > 0) & (f["availably"] > 0) & (f["brand_group_have_names"] > 0)].shape[0]
                             #из них когда query_dictionary_brand_group_overlap > 0
+        x11 = f[(f["have_region"] > 0) & (f["results_groups"] > 0) & (f["search_results"] > 0) & (f["availably"] > 0) & (f["brand_group_have_names"] > 0) & (f["query_dictionary_brand_group_overlap"] > 0)].shape[0]
                                 #из них когда local_store > 0
+        x13 = f[(f["have_region"] > 0) & (f["results_groups"] > 0) & (f["search_results"] > 0) & (f["availably"] > 0) & (f["brand_group_have_names"] > 0) & (f["query_dictionary_brand_group_overlap"] > 0) & (f["local_store"] > 0)].shape[0]
                                     #из них когда succsess_searches_count > 0
+        x15 = f[(f["have_region"] > 0) & (f["results_groups"] > 0) & (f["search_results"] > 0) & (f["availably"] > 0) & (f["brand_group_have_names"] > 0) & (f["query_dictionary_brand_group_overlap"] > 0) & (f["local_store"] > 0) & (f["succsess_searches_count"] > 0)].shape[0]
                                     #из них когда succsess_searches_count == 0
+        x16 = f[(f["have_region"] > 0) & (f["results_groups"] > 0) & (f["search_results"] > 0) & (f["availably"] > 0) & (f["brand_group_have_names"] > 0) & (f["query_dictionary_brand_group_overlap"] > 0) & (f["local_store"] > 0) & (f["succsess_searches_count"] == 0)].shape[0]
                                 #из них когда local_store == 0
+        x14 = f[(f["have_region"] > 0) & (f["results_groups"] > 0) & (f["search_results"] > 0) & (f["availably"] > 0) & (f["brand_group_have_names"] > 0) & (f["query_dictionary_brand_group_overlap"] > 0) & (f["local_store"] == 0)].shape[0]
                             #из них когда query_dictionary_brand_group_overlap == 0
+        x12 = f[(f["have_region"] > 0) & (f["results_groups"] > 0) & (f["search_results"] > 0) & (f["availably"] > 0) & (f["brand_group_have_names"] > 0) & (f["query_dictionary_brand_group_overlap"] == 0)].shape[0]
                         #из них когда brand_group_have_names == 0
+        x10 = f[(f["have_region"] > 0) & (f["results_groups"] > 0) & (f["search_results"] > 0) & (f["availably"] > 0) & (f["brand_group_have_names"] == 0)].shape[0]
                     #из них когда availably == 0
+        x8 = f[(f["have_region"] > 0) & (f["results_groups"] > 0) & (f["search_results"] > 0) & (f["availably"] == 0)].shape[0]
                 #из них когда search_results ==0
+        x6 = f[(f["have_region"] > 0) & (f["results_groups"] > 0) & (f["search_results"] == 0)].shape[0]
             #из них когда results_groups ==0
+        x4 = f[(f["have_region"] > 0) & (f["results_groups"]==0)].shape[0]
 
 
 
