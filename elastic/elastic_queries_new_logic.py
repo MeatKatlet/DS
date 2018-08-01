@@ -14,6 +14,7 @@ import time
 import collections
 #import searches.searches
 #from searches import searches
+from validate.validate_searches import Availebness_in_1c
 from  frame_partial_reader.frame_partial_reader import Frame_partial_reader
 warnings.filterwarnings('ignore')
 
@@ -192,7 +193,7 @@ class Search_results_events(Base_Elastic):
         #self.list_of_search_uids = list_of_search_uids
 
         # создаем df в котором будут в каждой строке инфа по поиску запчасти, колонки искомый артикул?, результат поиска(1/0, удачный/неудачный), бренд, регион, товарная группа,
-        self.all_searches = pd.DataFrame(columns=['Search_uid', 'Search_query', 'brand', 'region', 'group', 'Search_result'])#бренд/товарная группа браться будут из поискового запроса
+        self.all_searches = pd.DataFrame(columns=['Search_uid', 'timestamp','Search_query', 'brand', 'region', 'group', 'Search_result'])#бренд/товарная группа браться будут из поискового запроса
         #self.searches_not_standart = pd.DataFrame(columns=['Timestamp', 'Brand', 'Group'])#статистика по нестандартным выдачам
 
         self.with_tcp = False  # брать в расчет или нет товары строннних поставщиков(заменители) (is_approximate_delivery_interval?) это для задачи 2, для задачи 1 их в расчет не брать
@@ -204,9 +205,15 @@ class Search_results_events(Base_Elastic):
         pr = Frame_partial_reader()
         pr.read("parts_with_sg_mg.csv")
 
+
+
         self.goods_classifier = pr.parse_result
+        #self.goods_classifier = pr.nsi_dict#это для тестирования!
+
         self.brands_dict = pr.brands
         self.groups_dict = pr.groups
+        #self.articles_dict = pr.articles
+
         self.regions_dict = collections.OrderedDict()
 
         #номер детали - хеш(бренд+группа) (бренд группа)
@@ -225,6 +232,8 @@ class Search_results_events(Base_Elastic):
         #есть кросс или нет на искомый товар
         #регион локального склада
         #регион не локального склада
+
+
 
 
     def do_logic(self, list_of_elements):
@@ -273,12 +282,15 @@ class Search_results_events(Base_Elastic):
                         # отсутствующая в наличии запчасть это неудачный поиск!
                         if "part" in element_of_search_results and "brand_name" in element_of_search_results and "market_group_name" in element_of_search_results:
 
-                            brand = element_of_search_results["brand_name"].replace(r"'", "").replace("\\","")
+                            brand = element_of_search_results["brand_name"]#.replace(r"'", "").replace("\\","")
                             group = element_of_search_results["market_group_name"]
-
+                            nsi = element_of_search_results["link"].split("=")[1] #из ссылки извлекаем
                             #совпадение по бренду/товарной группе из поисковой строки
 
-                            if brand!= "" and group!= "" and self.check_presence_in_list(search_query, brand, group) == True:#есть в списке сочетаний брендов и групп по этому номеру товара
+                            res = self.check_presence_in_list(search_query, nsi)#[result, brand_group_combination]
+
+
+                            if brand!= "" and group!= "" and res[0] == True:#есть в списке сочетаний брендов и групп по этому номеру товара
                                 #search_result = 1  # удачный поиск
                                 #cross = "cross" in element_of_search_results
 
@@ -287,26 +299,25 @@ class Search_results_events(Base_Elastic):
                                     if element_of_search_results["part"]["is_approximate_delivery_interval"] == False and self.with_tcp == False:  # не ТСП и ТСП не заказывали для запроса
                                         # все кроме ТСП, свои товары
                                         succsess_searches_count += 1
-                                        #brands.append(brand)
-                                        #market_groups.append(group)
-                                        if (self.brands_dict[brand],self.groups_dict[group]) not in brand_group_variants:
-                                            brand_group_variants[(self.brands_dict[brand],self.groups_dict[group])] = 1
+
+                                        #res[1] - это tuple из комбинации кодов (бренд, группа)
+
+                                        if res[1] not in brand_group_variants:
+                                            brand_group_variants[res[1]] = 1
                                         else:
-                                            brand_group_variants[(self.brands_dict[brand], self.groups_dict[group])] += 1
-                                        #df.loc[len(df)] = [brand,group]
+                                            brand_group_variants[res[1]] += 1
+
 
 
                                     elif self.with_tcp == True:  # заказали и те и те (задача 2)
 
                                         succsess_searches_count += 1
-                                        #df.loc[len(df)] = [brand, group]
-                                        #brands.append(brand)
-                                        #market_groups.append(group)
 
-                                        if (self.brands_dict[brand],self.groups_dict[group]) not in brand_group_variants:
-                                            brand_group_variants[(self.brands_dict[brand],self.groups_dict[group])] = 1
+
+                                        if res[1] not in brand_group_variants:
+                                            brand_group_variants[res[1]] = 1
                                         else:
-                                            brand_group_variants[(self.brands_dict[brand], self.groups_dict[group])] += 1
+                                            brand_group_variants[res[1]] += 1
 
 
                 #unique_brands = set(brands)
@@ -316,27 +327,32 @@ class Search_results_events(Base_Elastic):
                     #self.not_succsess2 += 1
 
                 if succsess_searches_count == 0 and empty_result == False:#ни одного - неудачный + непустые выдачи были
-
-                    if search_query in self.goods_classifier:#искал то что у нас есть обычно(может быть в принципе)!
+                    r = self.check_variants(search_query)
+                    q = r[1]
+                    if r[0]:#искал то что у нас есть обычно(может быть в принципе)!
                         #либо юзер подразумевал сразу несколько сочетаний брендов и групп, которые ищет
-                        if len(self.goods_classifier[search_query])>1:
-                            #todo какой бренд/группу брать? может это число можно сократить узная по переходам на карточки товара из предварительной выдачи?
+                        if len(self.goods_classifier[q][1])>1:#
+
                             self.not_founded_several_brands += 1#5379 - не было совпадений в выдаче с тем что подразумевается под номером детали(совпадений с наличием?)
                         # либо одно сочетание бренда группы которое ищет
-                        elif len(self.goods_classifier[search_query])==1:#т.е. то что не нашел то и записываем в ответ
-                            brand_code = list(self.goods_classifier[search_query].keys())[0][0]
-                            group_code = list(self.goods_classifier[search_query].keys())[0][1]
+                        elif len(self.goods_classifier[q][1])==1:#т.е. то что не нашел то и записываем в ответ
+                            brand_code = self.goods_classifier[q][1][0][0]
+                            group_code =  self.goods_classifier[q][1][0][1]
+                            #brand_code = list(self.goods_classifier[search_query][1].keys())[0][0]
+                            #group_code = list(self.goods_classifier[search_query][1].keys())[0][1]
 
-                            self.add_to_frame(search_uid, search_query, brand_code, region, group_code, 0)
+                            self.add_to_frame(search_uid,timestamp, q, brand_code, region, group_code, 0)
 
                     else:#такого запроса нет в классификаторе!
                         self.not_founded_out_of_articles_range += 1#17523
 
 
                 elif succsess_searches_count == 1 and len(brand_group_variants)==1:#одно совпадение но с одним и тем же
+                    r = self.check_variants(search_query)
+                    q = r[1]
 
                     # либо юзер подразумевал сразу несколько сочетаний брендов и групп, которые ищет
-                    if len(self.goods_classifier[search_query])>1:#подразумевал несколько сочетаний а нашел 1 совпадение из подразумеваемых с выжачей
+                    if len(self.goods_classifier[q][1])>1:#подразумевал несколько сочетаний а нашел 1 совпадение из подразумеваемых с выжачей
                         #todo какой бренд/группу брать для этого? правильно ли я сделал, ведь юзер подразумевает несколько сочетаний
                         #получается те которые нашел!, совпал 1 раз по наличию со списком подразумеваемого
 
@@ -344,33 +360,36 @@ class Search_results_events(Base_Elastic):
                         group_code = list(brand_group_variants.keys())[0][1]
 
 
-                        self.add_to_frame(search_uid, search_query, brand_code, region, group_code, 1)
+                        self.add_to_frame(search_uid,timestamp, q, brand_code, region, group_code, 1)
 
 
                     # либо одно сочетание бренда группы которое ищет
-                    elif len(self.goods_classifier[search_query]) == 1:
+                    elif len(self.goods_classifier[q][0]) == 1:
                         brand_code = list(brand_group_variants.keys())[0][0]
                         group_code = list(brand_group_variants.keys())[0][1]
 
-                        self.add_to_frame(search_uid, search_query, brand_code, region, group_code, 1)
+                        self.add_to_frame(search_uid,timestamp, q, brand_code, region, group_code, 1)
 
                 elif succsess_searches_count > 1 and len(brand_group_variants)==1:#несколько совпадений но с одним и тем же
-
+                    r = self.check_variants(search_query)
+                    q = r[1]
                     # либо юзер подразумевал сразу несколько сочетаний брендов и групп, которые ищет
-                    if len(self.goods_classifier[search_query])>1:
+                    if len(self.goods_classifier[q][1])>1:
                         brand_code = list(brand_group_variants.keys())[0][0]
                         group_code = list(brand_group_variants.keys())[0][1]
 
-                        self.add_to_frame(search_uid, search_query, brand_code, region, group_code, 1)
+                        self.add_to_frame(search_uid,timestamp, q, brand_code, region, group_code, 1)
                     # либо одно сочетание бренда группы которое ищет
-                    elif len(self.goods_classifier[search_query]) == 1:
+                    elif len(self.goods_classifier[q][1]) == 1:
                         brand_code = list(brand_group_variants.keys())[0][0]
                         group_code = list(brand_group_variants.keys())[0][1]
 
-                        self.add_to_frame(search_uid, search_query, brand_code, region, group_code, 1)
+                        self.add_to_frame(search_uid, timestamp,q, brand_code, region, group_code, 1)
 
                 elif succsess_searches_count > 1 and len(brand_group_variants) > 1:  # несколько совпадений но с разными сочетаниями
-                    if len(self.goods_classifier[search_query]) > 1:#здесь только так может быть!
+                    r = self.check_variants(search_query)
+                    q = r[1]
+                    if len(self.goods_classifier[q][1]) > 1:#здесь только так может быть!
                         #todo какой бренд группу брать?
                         #self.founded_several_combinations += 1#46 таких
                         self.founded_several_combinations[search_uid] = 1#пагинация должна уменьшить количество конфликтных ситуаций
@@ -380,11 +399,12 @@ class Search_results_events(Base_Elastic):
 
                 #статистику по одиночным посчитаем по self.all_searches
 
-    def add_to_frame(self,search_uid,search_query,brand_code,region,group_code,result):
+    def add_to_frame(self,search_uid,timestamp,search_query,brand_code,region,group_code,result):
         #только если не в конфликтых уже
         if search_uid not in self.founded_several_combinations:
             self.all_searches.loc[len(self.all_searches)] = [
                 search_uid,
+                timestamp,
                 search_query,
                 brand_code,
                 self.regions_dict[region],
@@ -392,14 +412,68 @@ class Search_results_events(Base_Elastic):
                 result
             ]
 
-    def check_presence_in_list(self,search_query, brand, group):
-        #hex = str(hash(brand+group))
+    def check_presence_in_list_old(self,search_query, brand, group):
+
         if search_query in self.goods_classifier:
             #if brand in self.goods_classifier[search_query] and self.goods_classifier[search_query][brand]==group:#совпадает по бренду и товарной группе
             #входит ли сочетание бренд/группа в список сочетаний под этим номером
             if brand in self.brands_dict and group in self.groups_dict and (self.brands_dict[brand],self.groups_dict[group]) in self.goods_classifier[search_query]:
                 return True
         return False
+
+    def check_variants(self,search_query):
+        raw = search_query
+        without_spaces = search_query.replace(" ", "")
+        without_spaces_and_defises = without_spaces.replace("-", "")
+        without_dies_suffix = without_spaces_and_defises.split("#")[0]
+        result = False
+        q= 0
+        if raw in self.goods_classifier:
+            result = True
+            q = raw
+
+        elif without_spaces in self.goods_classifier:
+            result = True
+            q = without_spaces
+
+        elif without_spaces_and_defises in self.goods_classifier:
+            result = True
+            q = without_spaces_and_defises
+
+        elif without_dies_suffix in self.goods_classifier:
+            result = True
+            q = without_dies_suffix
+
+        return [result,q]
+
+    def check_presence_in_list(self,search_query, nsi):
+        #todo артикулы в справочнике могут не совпадать!
+        #надо пробовать по разному - сырой, без пробелов, без дефисов
+        #бренды в elastic не совпадают с брендами в справочнике NSI поэтому
+        #надо получить по артикулу список NSI и проверить присутствие
+        result = False
+        brand_group_combination = ()
+
+        """
+        self.goods_classifier[0][NSI 1] = id1 - номер соответствующего сочетания бренд/группа для этого NSI
+        self.goods_classifier[0][NSI 2] = id2
+        
+        self.goods_classifier[1][id1] = (код бренда, код группы)
+        self.goods_classifier[1][id2] = (код бренда, код группы)
+        """
+        r = self.check_variants(search_query)
+        if r[0]:
+            if nsi in self.goods_classifier[r[1]][0]:
+                result = True
+
+                position_of_key_in_list = self.goods_classifier[r[1]][0][nsi]
+
+
+                brand_group_combination = list(self.goods_classifier[r[1]][1])[position_of_key_in_list]
+
+
+        return [result,brand_group_combination]#список совпавших будет возвращять!
+
 
     def do_logic_short(self, list_of_elements):
         self.do_logic(list_of_elements)
@@ -726,6 +800,8 @@ class Search_plots_factory():
             self.group_dict = search_results.groups_dict
             self.region_dict = search_results.regions_dict
 
+            self.goods_classifier = search_results.goods_classifier
+
             #self.founded_several_combinations = search_results.founded_several_combinations
             #self.not_succsess_searches = search_results.not_succsess
 
@@ -734,9 +810,11 @@ class Search_plots_factory():
             #special.to_csv('special.csv')#сохранить в файл
 
             #self.draw_statistics(search_results)
-            self.collapse_rows_from_one_pagination_chain()
+            before_frame = self.collapse_rows_from_one_pagination_chain()
+            before_frame.to_csv('out2.csv', index=False)
+            self.test_frame(before_frame)
 
-            self.main_frame.to_csv('out.csv',index=False)
+            self.main_frame.to_csv('out.csv', index=False)
             self.first_timestamp_from_query = search_results.first_timestamp_from_query
 
             with open('special.json', 'w') as fp:
@@ -747,6 +825,10 @@ class Search_plots_factory():
                 json.dump(self.group_dict, fp)
             with open('region_dict.json', 'w') as fp:
                 json.dump(self.region_dict, fp)
+
+
+
+
 
         else:
             #special = pd.read_csv('special.csv')
@@ -768,10 +850,56 @@ class Search_plots_factory():
 
             #writer.save()
             #todo из фрейма фильтровать ьлдбко наши бренды!
+
+    def test_frame(self,before_frame):
+        # -----------------------------------для теста-----------------------------------------------------
+        availebness_1c = Availebness_in_1c()
+
+        availebness_1c.parse_xml_fill_dictionary("vigruzka.xml")
+
+        #availebness_1c.presence_in_1c  # проверка присутствия по NSI в этом словаре!
+
+        # -------------------------------------------------------------------------------------------------
+
+        d = pd.DataFrame(np.zeros((self.main_frame.shape[0], 1)))
+        self.main_frame['validate_result'] = d
+        rows = self.main_frame.shape[0]
+        for row in range(0,rows,1):
+            line = self.main_frame.iloc[row]
+            article = line[1]
+            search_uid = line[0]
+            nsi_list = list(self.goods_classifier[article][0])
+
+            df = before_frame[(before_frame["Search_uid"] == search_uid) & (before_frame["Search_query"]==article)]
+            rows2 = df.shape[0]
+            result = 0
+            for row2 in range(0,rows2,1):
+                line2 = df[row2]
+                timestamp = line2[1]
+
+                r = availebness_1c.check_good_availible(timestamp,nsi_list)
+                if r:
+                    result+=1
+
+            if result>0:
+                self.main_frame.iloc[row][5] = 1
+
+        m1 = self.main_frame[(self.main_frame['Search_result'] == 0) & (self.main_frame['validate_result'] == 0)].shape[0]
+        m2 = self.main_frame[(self.main_frame['Search_result'] == 0) & (self.main_frame['validate_result'] == 1)].shape[0]#таких должно быть мало
+        m3 = self.main_frame[(self.main_frame['Search_result'] == 1) & (self.main_frame['validate_result'] == 0)].shape[0]#таких должно быть мало
+        m4 = self.main_frame[(self.main_frame['Search_result'] == 1) & (self.main_frame['validate_result'] == 1)].shape[0]
+
+        print([m1,m2, m3, m4])
+
+
+
+
     def collapse_rows_from_one_pagination_chain(self):
         #todo проконтролировать чтобы во фрейм попадали только search_uid из одной серии пагинаций, чтобы других причин для дубликатов не было!
         #эта функция схлопывает только пагинацию и выявляет странные дубликаты с разными поисковыми запросами, она не работает с конфликтами,
         #группируем по полям, объединяем тем самым выдачи из одной серии страниц пагинации, суммируем для выяснения общего результата поиска в одной серии страниц пагинации
+        before_frame = self.main_frame
+
         self.main_frame = self.main_frame.groupby(['Search_uid', 'Search_query','region','brand', 'group'], as_index=False)['Search_result'].agg('sum')
 
 
@@ -790,7 +918,7 @@ class Search_plots_factory():
 
         self.main_frame.loc[self.main_frame['Search_result'] > 0, 'Search_result'] = 1
         #исключаем странные события все! делаем только уникальные
-
+        return before_frame
 
     def add_pretty_rows_and_columns_names(self,df):
 
@@ -820,16 +948,55 @@ class Search_plots_factory():
 
         return slice
 
+    def test_percent_slice(self,df):
+        s = df.shape
+        for i in range(0, s[0], 1):  # по строкам
+
+            # row_name = all_searches.index[i]
+            for j in range(0, s[1], 1):  # по столбцам
+                if self.slice_col1 == "brand" and self.slice_col2 == "group":
+                    row_name = df.index[i]
+                    col_name = df.columns[j]
+                    all = self.main_frame[(self.main_frame["brand"] == row_name) & (self.main_frame["group"] == col_name)].shape[0]
+                    suc = self.main_frame[(self.main_frame["brand"] == row_name) & (self.main_frame["group"] == col_name)& (self.main_frame["validate_result"] == 1)].shape[0]
+                    x =(suc*100)/all
+                    if df.iloc[i][j] != x:
+                        print([row_name,col_name])
+
+                elif self.slice_col1 == "region" and self.slice_col2 == "group":
+
+                    col_name = df.columns[j]
+                    all = self.main_frame[(self.main_frame["group"] == col_name)].shape[0]
+                    suc = self.main_frame[(self.main_frame["group"] == col_name) & (self.main_frame["validate_result"] == 1)].shape[0]
+                    x = (suc * 100) / all
+                    if df.iloc[i][j] != x:
+                        print(["Новосибирск", col_name])
+
+                elif self.slice_col1 == "region" and self.slice_col2 == "brand":
+
+                    col_name = df.columns[j]
+                    all = self.main_frame[(self.main_frame["brand"] == col_name)].shape[0]
+                    suc = self.main_frame[(self.main_frame["brand"] == col_name) & (self.main_frame["validate_result"] == 1)].shape[0]
+                    x = (suc * 100) / all
+                    if df.iloc[i][j] != x:
+                        print(["Новосибирск",col_name])
+
+
+
+
     def create_heatmap(self,plot_heatmap,f,plot_name, plot_size):#по параметрам будем делать heatmap
 
         df = self.create_frame_for_plot(f)
 
         df = self.add_pretty_rows_and_columns_names(df)
 
-        writer = pd.ExcelWriter("slice_"+self.slice_col1+"_"+self.slice_col2+'.xlsx')
+        writer = pd.ExcelWriter("slice_" + self.slice_col1 + "_" + self.slice_col2 + '.xlsx')
         df.to_excel(writer, 'Sheet1')
 
         writer.save()
+
+        self.test_percent_slice(df)
+
         #можно отфильтровать только удачные из фрейма , затем crosstab по ним, затем приделываем имена колонок и строк и готов разрез в штуках по удачным
         s = self.main_frame.query("Search_result == 1")
         s2 = pd.crosstab(s[self.slice_col1],s[self.slice_col2])
