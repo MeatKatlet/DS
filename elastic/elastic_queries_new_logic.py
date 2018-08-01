@@ -38,6 +38,7 @@ json.loads(data)
 
 class Base_Elastic():
     first_timestamp_from_query = 0
+    timestamp_for_query = ''
     def __init__(self):
         self.df = pd.DataFrame()
         # self.query = ""
@@ -75,7 +76,7 @@ class Base_Elastic():
 
         total_size = deserilised["hits"]["total"]
         if total_size>0:
-            self.first_timestamp_from_query = deserilised["hits"]["hits"][0]["_source"]["timestamp"]
+            self.first_timestamp_from_query = deserilised["hits"]["hits"][0]["_source"][self.timestamp_for_query]
 
         # response2 = json_normalize(json.loads(response.text))
         # total_size = int(response2['hits.total'])
@@ -93,7 +94,7 @@ class Base_Elastic():
         # tsmp = df["_source.search_timestamp"].max()
         l = len(deserilised["hits"]["hits"])
         #last_tsmp = deserilised["hits"]["hits"][size-1]["_source"]["timestamp"]  # поскольку они отсортированы то последний это максимальный timestamp должен быть
-        last_tsmp = deserilised["hits"]["hits"][l - 1]["_source"]["timestamp"]
+        last_tsmp = deserilised["hits"]["hits"][l - 1]["_source"][self.timestamp_for_query]
 
 
 
@@ -128,7 +129,7 @@ class Base_Elastic():
                 k = l - 1
 
                 # last_tsmp = response['_source.'+timestampe_field_name]
-                last_tsmp = deserilised["hits"]["hits"][k]["_source"]["timestamp"]
+                last_tsmp = deserilised["hits"]["hits"][k]["_source"][self.timestamp_for_query]
             else:
                 break
             scroll_size = scroll_size - size
@@ -201,7 +202,7 @@ class Search_results_events(Base_Elastic):
         self.goods_classifier = list()
 
         pr = Frame_partial_reader()
-        pr.read("parts_with_mng.csv")
+        pr.read("parts_with_sg_mg.csv")
 
         self.goods_classifier = pr.parse_result
         self.brands_dict = pr.brands
@@ -737,9 +738,9 @@ class Search_plots_factory():
 
             self.main_frame.to_csv('out.csv',index=False)
             self.first_timestamp_from_query = search_results.first_timestamp_from_query
+
             with open('special.json', 'w') as fp:
                 json.dump(search_results.first_timestamp_from_query, fp)
-
             with open('brand_dict.json', 'w') as fp:
                 json.dump(self.brand_dict, fp)
             with open('group_dict.json', 'w') as fp:
@@ -752,9 +753,9 @@ class Search_plots_factory():
             #self.not_succsess_searches = special.iloc[0][1]
 
             self.main_frame = pd.read_csv('out.csv')
-            self.collapse_rows_from_one_pagination_chain()
-            #with open('special.json') as data_file:
-            #    self.first_timestamp_from_query = json.load(data_file)
+            #self.collapse_rows_from_one_pagination_chain()
+            with open('special.json') as data_file:
+                self.first_timestamp_from_query = json.load(data_file)
             with open('brand_dict.json') as data_file:
                 self.brand_dict = json.load(data_file)
             with open('group_dict.json') as data_file:
@@ -770,7 +771,7 @@ class Search_plots_factory():
     def collapse_rows_from_one_pagination_chain(self):
         #todo проконтролировать чтобы во фрейм попадали только search_uid из одной серии пагинаций, чтобы других причин для дубликатов не было!
         #эта функция схлопывает только пагинацию и выявляет странные дубликаты с разными поисковыми запросами, она не работает с конфликтами,
-       #группируем по полям, объединяем тем самым выдачи из одной серии страниц пагинации, суммируем для выяснения общего результата поиска в одной серии страниц пагинации
+        #группируем по полям, объединяем тем самым выдачи из одной серии страниц пагинации, суммируем для выяснения общего результата поиска в одной серии страниц пагинации
         self.main_frame = self.main_frame.groupby(['Search_uid', 'Search_query','region','brand', 'group'], as_index=False)['Search_result'].agg('sum')
 
 
@@ -1019,7 +1020,7 @@ class Sales_plots_factory(Search_plots_factory):
         #percent3 = (self.frame_searches_with_sales_only.shape[0]*100)/all_chains#% поисков с продажами
 
         labels = 'удачные с продажей', 'удачные без продажи', 'неудачные с продажей','неудачные без продажи','продаж без поисков вообще'
-        fracs = [percent1, percent2, percent3,percent4,percent5]
+        fracs = [percent1, percent2, percent3,percent4,percent5] #[159, 507, 3075, 24178, 71212]
 
         plt.pie(fracs, labels=labels, autopct='%1.1f%%', shadow=False)
         plt.title('Виды цепочек действий пользователей')
@@ -1100,14 +1101,15 @@ class Sales_plots_factory(Search_plots_factory):
         percentage_of_saled_searches_in_cell = 0
 
         if row_name in slice.index and col_name in slice.columns:#если есть то в поисках завершенных продажей такая строка колонк аесть
-            if sliced_searches.iloc[row_name][col_name] == 0:#срез где все удачные поиски!
+
+            if sliced_searches.loc[int(row_name)][int(col_name)] == 0:#срез где все удачные поиски!
                 percentage_of_saled_searches_in_cell = 0
 
-                assert (slice.loc[row_name][col_name] == 0),"Slice "+"slice_"+self.slice_col1+"_"+self.slice_col2+" Not equal values in crosstab of all searches and in crosstab of serches ended with sales"
+                #assert (slice.loc[row_name][col_name] == 0),"Slice "+"slice_"+self.slice_col1+"_"+self.slice_col2+" Not equal values in crosstab of all searches and in crosstab of serches ended with sales"
             else:
-                percentage_of_saled_searches_in_cell = (slice.loc[row_name][col_name]*100) / sliced_searches.iloc[row_name][col_name]
+                percentage_of_saled_searches_in_cell = (slice.loc[row_name][col_name]*100) / sliced_searches.loc[row_name][col_name]
 
-                assert (slice.loc[row_name][col_name] != 0), "Slice " + "slice_"+self.slice_col1+"_"+self.slice_col2 + " Not equal values in crosstab of all searches and in crosstab of serches ended with sales"
+                #assert (slice.loc[row_name][col_name] != 0), "Slice " + "slice_"+self.slice_col1+"_"+self.slice_col2 + " Not equal values in crosstab of all searches and in crosstab of serches ended with sales"
 
         return percentage_of_saled_searches_in_cell
 
