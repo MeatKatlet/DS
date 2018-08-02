@@ -250,6 +250,10 @@ class Explore_sales_chains():
         local_store,
         succsess_searches_count
         """
+        #todo надо делать обнаружение совпадения по NSI а не по брендам и группам(подключить справочник)
+        #search_results.list_of_sales_ids должен совпадать по количеству строк с сгруппированным списком поисков
+
+        #todo сгруппировать одинаковые id и артикулы (пагинация поиска)
         f = search_events_worker.types_of_results
         #сколько выдач когда нет региона
         x1 = f[(f["have_region"] == 0)].shape[0]

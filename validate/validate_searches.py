@@ -23,15 +23,15 @@ class Availebness_in_1c():
             goods_in_store = iter(list(child))#итератор по тегам товар!
             for good in goods_in_store:
                 nsi_attr = good.get("nsi_attr")
-                article_attr = good.get("article_attr")
-                brand_attr = good.get("brand_attr")
-                group_attr = good.get("group_attr")
+                #article_attr = good.get("article_attr")
+                #brand_attr = good.get("brand_attr")
+                #group_attr = good.get("group_attr")
 
                 if nsi_attr not in self.presence_in_1c:
                     self.presence_in_1c[nsi_attr] = []
                     # self.presence_in_1c[nsi_attr]["brand"] = brand_attr
                     # self.presence_in_1c[nsi_attr]["group"] = brand_attr
-                    self.presence_in_1c[nsi_attr] = []
+                    #self.presence_in_1c[nsi_attr] = []
 
                 else:
                     self.dublicate +=1

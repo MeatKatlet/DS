@@ -39,7 +39,7 @@ json.loads(data)
 
 class Base_Elastic():
     first_timestamp_from_query = 0
-    timestamp_for_query = ''
+    timestamp_for_query = 'timestamp'
     def __init__(self):
         self.df = pd.DataFrame()
         # self.query = ""
@@ -189,7 +189,9 @@ class Searches_in_input_field_event(Base_Elastic):
         return
 
 class Search_results_events(Base_Elastic):
+
     def __init__(self):
+        self.from_timestamp = 1530403200
         #self.list_of_search_uids = list_of_search_uids
 
         # создаем df в котором будут в каждой строке инфа по поиску запчасти, колонки искомый артикул?, результат поиска(1/0, удачный/неудачный), бренд, регион, товарная группа,
@@ -235,6 +237,12 @@ class Search_results_events(Base_Elastic):
 
 
 
+    def get_query(self,q,list_of_args=list()):
+
+        list_of_args.append(str(self.from_timestamp))
+
+        query = q(list_of_args)
+        return query
 
     def do_logic(self, list_of_elements):
         # list_of_elements - это список объектов из объекта hits в результате выдачи
@@ -336,8 +344,8 @@ class Search_results_events(Base_Elastic):
                             self.not_founded_several_brands += 1#5379 - не было совпадений в выдаче с тем что подразумевается под номером детали(совпадений с наличием?)
                         # либо одно сочетание бренда группы которое ищет
                         elif len(self.goods_classifier[q][1])==1:#т.е. то что не нашел то и записываем в ответ
-                            brand_code = self.goods_classifier[q][1][0][0]
-                            group_code =  self.goods_classifier[q][1][0][1]
+                            brand_code = list(self.goods_classifier[q][1].keys())[0][0]
+                            group_code =  list(self.goods_classifier[q][1].keys())[0][1]
                             #brand_code = list(self.goods_classifier[search_query][1].keys())[0][0]
                             #group_code = list(self.goods_classifier[search_query][1].keys())[0][1]
 
@@ -581,14 +589,15 @@ def query_make2(list_of_args):
     return query
 
 def query_make3(list_of_args):
-    if len(list_of_args)==0:
-        gt = 10
+    if len(list_of_args)==1:
+        gt = list_of_args[0]#базовый от 1 июля
     else:
         gt = list_of_args[0]
     query = {
        "bool": {
               "must": [
                 {"range": {"timestamp": {"gt": gt}}},
+                {"range": {"timestamp": {"lt": 1533076920}}},
                 {
                     "match": {
                         "is_internal_user": False
@@ -834,16 +843,31 @@ class Search_plots_factory():
             #special = pd.read_csv('special.csv')
             #self.not_succsess_searches = special.iloc[0][1]
 
-            self.main_frame = pd.read_csv('out.csv')
+            #search_results = Search_results_events()
+            #self.brand_dict = search_results.brands_dict
+            #self.group_dict = search_results.groups_dict
+            #self.region_dict = search_results.regions_dict
+            #self.goods_classifier = search_results.goods_classifier
+
+            self.main_frame = pd.read_csv('out2.csv')
+            #self.main_frame = pd.read_csv('out.csv')
+
+
+            before_frame = self.collapse_rows_from_one_pagination_chain()
+
+            v = pd.read_csv('validated.csv')
+            self.test_frame(before_frame)
+
+            #self.main_frame = pd.read_csv('out.csv')
             #self.collapse_rows_from_one_pagination_chain()
-            with open('special.json') as data_file:
-                self.first_timestamp_from_query = json.load(data_file)
-            with open('brand_dict.json') as data_file:
-                self.brand_dict = json.load(data_file)
-            with open('group_dict.json') as data_file:
-                self.group_dict = json.load(data_file)
-            with open('region_dict.json') as data_file:
-                self.region_dict = json.load(data_file)
+            #with open('special.json') as data_file:
+            #    self.first_timestamp_from_query = json.load(data_file)
+            #with open('brand_dict.json') as data_file:
+            #    self.brand_dict = json.load(data_file)
+            #with open('group_dict.json') as data_file:
+            #    self.group_dict = json.load(data_file)
+            #with open('region_dict.json') as data_file:
+            #    self.region_dict = json.load(data_file)
             #+++++++++++++++++++++++++++++++++++++++++++++++
             #writer = pd.ExcelWriter('main_frame.xlsx')
             #self.main_frame.to_excel(writer, 'Sheet1')
@@ -874,7 +898,7 @@ class Search_plots_factory():
             rows2 = df.shape[0]
             result = 0
             for row2 in range(0,rows2,1):
-                line2 = df[row2]
+                line2 = df.iloc[row2]
                 timestamp = line2[1]
 
                 r = availebness_1c.check_good_availible(timestamp,nsi_list)
@@ -882,7 +906,7 @@ class Search_plots_factory():
                     result+=1
 
             if result>0:
-                self.main_frame.iloc[row][5] = 1
+                self.main_frame.iloc[row][6] = 1
 
         m1 = self.main_frame[(self.main_frame['Search_result'] == 0) & (self.main_frame['validate_result'] == 0)].shape[0]
         m2 = self.main_frame[(self.main_frame['Search_result'] == 0) & (self.main_frame['validate_result'] == 1)].shape[0]#таких должно быть мало
@@ -1101,8 +1125,8 @@ class Sales_plots_factory(Search_plots_factory):
             sales = Search_sales(df["Search_uid"], 1530406861)#self.first_timestamp_from_query ранний timestamp записали todo когда из файла извлечено то лишняя колонка?
             q = query_make4
             sales.get_data(q, search_plots_factory.index, search_plots_factory.timestampe_field_name,size=1000)
-
-
+            sales.sales_without_searches = sales.sales_without_searches.groupby(["Search_uid_sales"], as_index=False)["Sale"].agg("count")#todo заменить везде где больше 1 на 1 для продаж законченных без поисков тоже надо группировать!
+            sales.sales = sales.sales.groupby(["Search_uid_sales"], as_index=False)["Sale"].agg("count")#todo заменить везде где больше 1 на 1 группируем по id поскольку один товар - это одно оформление заказа в эластике - одно событие(но в корзине может быть несколько товаров)
             """
                 #проверить на уникальность все значения индекса!
             l1 = len(df['Search_uid'].unique())

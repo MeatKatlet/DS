@@ -111,8 +111,7 @@ class Frame_partial_reader():
 
     def read(self, path):  # это для фреймов больше 1000
             # todo проверитиь уникальность кодов нси
-            goods_classifier = pd.read_csv(path, sep=';',
-                                           names=["NSI", "Brand", "oemnumber", "name", "number", "group"])
+            #goods_classifier = pd.read_csv(path, sep=';',names=["NSI", "Brand", "oemnumber", "name", "number", "group"])
             fp = open(path, encoding='utf-8')
             # n = 0
             # no_brand_or_group = 0
@@ -137,7 +136,7 @@ class Frame_partial_reader():
 
                     splitted = list(csv.reader([prev_line], delimiter=';'))
                     # n += 1
-                    nsi = splitted[0][1]
+                    nsi = splitted[0][0]
                     oemnumber = splitted[0][2]
                     brand = splitted[0][1]
                     group = splitted[0][5]
@@ -160,10 +159,10 @@ class Frame_partial_reader():
                         # d = dict()
                         # d['brand'] = brand
                         # d['group'] = group
-                        self.parse_result[oemnumber] = {}
+                        self.parse_result[oemnumber] = [collections.OrderedDict(),collections.OrderedDict()]
                         #key = len(self.parse_result[oemnumber][0])
                         self.parse_result[oemnumber][0][nsi] = 0 #порядковый номер ключа (бренд, группа)
-                        self.parse_result[oemnumber][1] = collections.OrderedDict()
+                        #self.parse_result[oemnumber][1] = collections.OrderedDict()
                         self.parse_result[oemnumber][1][(self.brands[brand],self.groups[gs])] = 0  # в виде чисел будет ключ (код бренда, код группы)
 
                     elif oemnumber in self.parse_result:
