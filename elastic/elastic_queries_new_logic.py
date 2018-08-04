@@ -204,6 +204,13 @@ class Search_results_events(Base_Elastic):
 
         self.goods_classifier = list()
 
+
+
+        f = pd.read_csv("searches.csv")
+
+        self.list_of_search_uids_of_searches_events_ended_with_sales = f["search_uid"].unique()
+
+
         pr = Frame_partial_reader()
         pr.read("parts_with_sg_mg.csv")
 
@@ -234,9 +241,70 @@ class Search_results_events(Base_Elastic):
         #есть кросс или нет на искомый товар
         #регион локального склада
         #регион не локального склада
+        self.types_of_results = pd.DataFrame(columns=[
+            'search_uid',
+            'query',
+            'page',
+            'have_region',
+            'results_groups',
+            'search_results',
+            'availably',
+            'brand_group_have_names',
+            'query_dictionary_brand_group_overlap',
+            'local_store',
+            'succsess_searches_count',
+            'tcp'
+        ])
 
 
+    def test_query(self,list_of_args):
+        if len(list_of_args) == 1:
+            gt = list_of_args[0]  # базовый от 1 июля
+        else:
+            gt = list_of_args[0]
+        query = {
+            "bool": {
+                "must": [
+                    {"range": {"timestamp": {"gt": gt,"lte": 1533081600}}},
 
+                    {
+                        "match": {
+                            "is_internal_user": False
+                        }
+                    },
+                    {
+                        "match": {
+                            "event": "search"
+                        }
+                    },
+                    {
+                        "match": {
+                            "region": "Новосибирск"
+                        }
+                    },
+
+                    {
+                        "exists": {"field": "results_groups"}
+                    },
+                    {
+                        "terms": {
+                            "search_uid": list(self.list_of_search_uids_of_searches_events_ended_with_sales)
+                        }
+                    },
+                ]
+
+            }
+        }
+
+        return query
+    """
+    {
+          "exists": {"field": "results_groups.search_results.brand_name"}
+    },
+    {
+          "exists": {"field": "results_groups.search_results.market_group_name"}
+     },
+    """
     def get_query(self,q,list_of_args=list()):
 
         list_of_args.append(str(self.from_timestamp))
@@ -254,6 +322,17 @@ class Search_results_events(Base_Elastic):
             timestamp = hit["timestamp"]
             search_query = hit["search_query"]
             search_uid = hit["search_uid"]
+            page = hit["page_number"]
+
+            have_region = 0
+            results_groups = 0
+            search_results = 0
+            availably = 0
+            brand_group_have_names = 0
+            query_dictionary_brand_group_overlap = 0
+            local_store = 0
+            tcp = 0
+            succsess_searches_count = 0  # не ТСП
 
             #brand_from_query = self.get_from_query(search_query)
 
@@ -261,12 +340,14 @@ class Search_results_events(Base_Elastic):
 
             if "region" in hit:
                 region = hit["region"]
+                have_region += 1
 
                 if region not in self.regions_dict:
                    self.regions_dict[region] = len(self.regions_dict)
 
                 length2 = len(hit["results_groups"])
-
+                if length2 == 0:
+                    results_groups += 1
 
                 #надо узнать статистику случаев когда больше двух брендов в результате выдачи
                 #надо записывать бренды
@@ -282,6 +363,8 @@ class Search_results_events(Base_Elastic):
                     results_group_item = hit["results_groups"][k]
 
                     length3 = len(results_group_item["search_results"])
+                    if length3==0:
+                        search_results += 1
 
                     for j in range(0, length3, 1):
                         element_of_search_results = results_group_item["search_results"][j]
@@ -289,6 +372,7 @@ class Search_results_events(Base_Elastic):
 
                         # отсутствующая в наличии запчасть это неудачный поиск!
                         if "part" in element_of_search_results and "brand_name" in element_of_search_results and "market_group_name" in element_of_search_results:
+                            availably += 1
 
                             brand = element_of_search_results["brand_name"]#.replace(r"'", "").replace("\\","")
                             group = element_of_search_results["market_group_name"]
@@ -299,10 +383,13 @@ class Search_results_events(Base_Elastic):
 
 
                             if brand!= "" and group!= "" and res[0] == True:#есть в списке сочетаний брендов и групп по этому номеру товара
+                                query_dictionary_brand_group_overlap += 1
+
                                 #search_result = 1  # удачный поиск
-                                #cross = "cross" in element_of_search_results
+                                cross = "cross" in element_of_search_results
 
                                 if element_of_search_results["part"]["is_local_delivery"] == True:  # только с локального склада
+                                    local_store += 1
 
                                     if element_of_search_results["part"]["is_approximate_delivery_interval"] == False and self.with_tcp == False:  # не ТСП и ТСП не заказывали для запроса
                                         # все кроме ТСП, свои товары
@@ -327,7 +414,8 @@ class Search_results_events(Base_Elastic):
                                         else:
                                             brand_group_variants[res[1]] += 1
 
-
+                                    else:
+                                        tcp +=1
                 #unique_brands = set(brands)
                 #unique_market_groups = set(market_groups)
 
@@ -406,6 +494,21 @@ class Search_results_events(Base_Elastic):
                             self.all_searches.drop(self.all_searches[self.all_searches['Search_uid'] == search_uid].index,inplace=True)
 
                 #статистику по одиночным посчитаем по self.all_searches
+
+            self.types_of_results.loc[len(self.types_of_results)] = [
+                search_uid,
+                search_query,
+                page,
+                have_region,
+                results_groups,
+                search_results,
+                availably,
+                brand_group_have_names,
+                query_dictionary_brand_group_overlap,
+                local_store,
+                succsess_searches_count,
+                tcp
+            ]
 
     def add_to_frame(self,search_uid,timestamp,search_query,brand_code,region,group_code,result):
         #только если не в конфликтых уже
@@ -597,7 +700,7 @@ def query_make3(list_of_args):
        "bool": {
               "must": [
                 {"range": {"timestamp": {"gt": gt}}},
-                {"range": {"timestamp": {"lt": 1533076920}}},
+                {"range": {"timestamp": {"lte": 1533081600}}},
                 {
                     "match": {
                         "is_internal_user": False
@@ -635,10 +738,10 @@ def query_make3(list_of_args):
 def query_make4(list_of_args):
     if len(list_of_args)==1:
         gt = list_of_args[0]  # базовый timestamp будет добавлять
-        range = {"timestamp": {"gt": gt}}
+        range = {"timestamp": {"gt": gt,"lt": 1533081600}}
     else:
         gt = list_of_args[0]#это будет когда уже в цикле идет запрос
-        range = {"timestamp": {"gt": gt}}
+        range = {"timestamp": {"gt": gt,"lt": 1533081600}}
 
     query = {
          "bool": {
@@ -646,6 +749,7 @@ def query_make4(list_of_args):
                  {
                      "range": range
                  },
+
                  {
                      "match": {
                         "event": "checkout"
@@ -800,16 +904,17 @@ class Search_plots_factory():
             # searches_input_field.get_data(q, index, timestampe_field_name)
             # q = query_make
             search_results = Search_results_events()  # searches_input_field.list_of_search_uids передавать когда понадобится фильтрация по мобытию вставки номера детали в строку поиска
-            q = query_make3
+            #q = query_make3
+            q = search_results.test_query
             search_results.get_data(q, self.index, self.timestampe_field_name)
-
+            search_results.types_of_results.to_csv("test_10000.csv", index=False)
 
             self.main_frame = search_results.all_searches
             self.brand_dict = search_results.brands_dict
             self.group_dict = search_results.groups_dict
             self.region_dict = search_results.regions_dict
-
-            self.goods_classifier = search_results.goods_classifier
+            search_results.goods_classifier = {}
+            #self.goods_classifier = search_results.goods_classifier
 
             #self.founded_several_combinations = search_results.founded_several_combinations
             #self.not_succsess_searches = search_results.not_succsess
@@ -819,25 +924,21 @@ class Search_plots_factory():
             #special.to_csv('special.csv')#сохранить в файл
 
             #self.draw_statistics(search_results)
-            before_frame = self.collapse_rows_from_one_pagination_chain()
-            before_frame.to_csv('out2.csv', index=False)
-            self.test_frame(before_frame)
+            self.collapse_rows_from_one_pagination_chain()
+            #before_frame.to_csv('out2.csv', index=False)
+            #self.test_frame(before_frame)
 
             self.main_frame.to_csv('out.csv', index=False)
             self.first_timestamp_from_query = search_results.first_timestamp_from_query
 
             with open('special.json', 'w') as fp:
-                json.dump(search_results.first_timestamp_from_query, fp)
+                json.dump(self.first_timestamp_from_query, fp)
             with open('brand_dict.json', 'w') as fp:
                 json.dump(self.brand_dict, fp)
             with open('group_dict.json', 'w') as fp:
                 json.dump(self.group_dict, fp)
             with open('region_dict.json', 'w') as fp:
                 json.dump(self.region_dict, fp)
-
-
-
-
 
         else:
             #special = pd.read_csv('special.csv')
@@ -849,25 +950,25 @@ class Search_plots_factory():
             #self.region_dict = search_results.regions_dict
             #self.goods_classifier = search_results.goods_classifier
 
-            self.main_frame = pd.read_csv('out2.csv')
+            #self.main_frame = pd.read_csv('out2.csv')
             #self.main_frame = pd.read_csv('out.csv')
 
 
-            before_frame = self.collapse_rows_from_one_pagination_chain()
+            #before_frame = self.collapse_rows_from_one_pagination_chain()
 
-            v = pd.read_csv('validated.csv')
-            self.test_frame(before_frame)
+            #v = pd.read_csv('validated.csv')
+            #self.test_frame(before_frame)
 
-            #self.main_frame = pd.read_csv('out.csv')
+            self.main_frame = pd.read_csv('out.csv')
             #self.collapse_rows_from_one_pagination_chain()
-            #with open('special.json') as data_file:
-            #    self.first_timestamp_from_query = json.load(data_file)
-            #with open('brand_dict.json') as data_file:
-            #    self.brand_dict = json.load(data_file)
-            #with open('group_dict.json') as data_file:
-            #    self.group_dict = json.load(data_file)
-            #with open('region_dict.json') as data_file:
-            #    self.region_dict = json.load(data_file)
+            with open('special.json') as data_file:
+                self.first_timestamp_from_query = json.load(data_file)
+            with open('brand_dict.json') as data_file:
+                self.brand_dict = json.load(data_file)
+            with open('group_dict.json') as data_file:
+                self.group_dict = json.load(data_file)
+            with open('region_dict.json') as data_file:
+                self.region_dict = json.load(data_file)
             #+++++++++++++++++++++++++++++++++++++++++++++++
             #writer = pd.ExcelWriter('main_frame.xlsx')
             #self.main_frame.to_excel(writer, 'Sheet1')
@@ -922,7 +1023,7 @@ class Search_plots_factory():
         #todo проконтролировать чтобы во фрейм попадали только search_uid из одной серии пагинаций, чтобы других причин для дубликатов не было!
         #эта функция схлопывает только пагинацию и выявляет странные дубликаты с разными поисковыми запросами, она не работает с конфликтами,
         #группируем по полям, объединяем тем самым выдачи из одной серии страниц пагинации, суммируем для выяснения общего результата поиска в одной серии страниц пагинации
-        before_frame = self.main_frame
+        #before_frame = self.main_frame
 
         self.main_frame = self.main_frame.groupby(['Search_uid', 'Search_query','region','brand', 'group'], as_index=False)['Search_result'].agg('sum')
 
@@ -942,7 +1043,7 @@ class Search_plots_factory():
 
         self.main_frame.loc[self.main_frame['Search_result'] > 0, 'Search_result'] = 1
         #исключаем странные события все! делаем только уникальные
-        return before_frame
+        #return before_frame
 
     def add_pretty_rows_and_columns_names(self,df):
 
@@ -1019,7 +1120,7 @@ class Search_plots_factory():
 
         writer.save()
 
-        self.test_percent_slice(df)
+        #self.test_percent_slice(df)
 
         #можно отфильтровать только удачные из фрейма , затем crosstab по ним, затем приделываем имена колонок и строк и готов разрез в штуках по удачным
         s = self.main_frame.query("Search_result == 1")
@@ -1122,11 +1223,21 @@ class Sales_plots_factory(Search_plots_factory):
         if from_db:
             # делаем запрос на продажи
             df = self.main_frame
-            sales = Search_sales(df["Search_uid"], 1530406861)#self.first_timestamp_from_query ранний timestamp записали todo когда из файла извлечено то лишняя колонка?
+            sales = Search_sales(df["Search_uid"], 1530403200)#1530403200 self.first_timestamp_from_query ранний timestamp записали todo когда из файла извлечено то лишняя колонка?
             q = query_make4
             sales.get_data(q, search_plots_factory.index, search_plots_factory.timestampe_field_name,size=1000)
-            sales.sales_without_searches = sales.sales_without_searches.groupby(["Search_uid_sales"], as_index=False)["Sale"].agg("count")#todo заменить везде где больше 1 на 1 для продаж законченных без поисков тоже надо группировать!
+
+            sales.sales_without_searches.to_csv("sales_without_searches2.csv", index=False)
+            sales.sales.to_csv("sales2.csv", index=False)
+
+            #sales.sales_without_searches = pd.read_csv("sales_without_searches2.csv")
+            #sales.sales = pd.read_csv("sales2.csv")
+
+
+            sales.sales_without_searches = sales.sales_without_searches.groupby(["Search_uid"], as_index=False)["Sale"].agg("count")#todo заменить везде где больше 1 на 1 для продаж законченных без поисков тоже надо группировать!
             sales.sales = sales.sales.groupby(["Search_uid_sales"], as_index=False)["Sale"].agg("count")#todo заменить везде где больше 1 на 1 группируем по id поскольку один товар - это одно оформление заказа в эластике - одно событие(но в корзине может быть несколько товаров)
+            sales.sales.loc[sales.sales['Sale'] > 0, 'Sale'] = 1
+            sales.sales_without_searches.loc[sales.sales_without_searches['Sale'] > 0, 'Sale'] = 1
             """
                 #проверить на уникальность все значения индекса!
             l1 = len(df['Search_uid'].unique())
@@ -1210,8 +1321,8 @@ class Sales_plots_factory(Search_plots_factory):
         #percent2 = (without_sales.shape[0]*100)/all_chains#% поисков без продаж
         #percent3 = (self.frame_searches_with_sales_only.shape[0]*100)/all_chains#% поисков с продажами
 
-        labels = 'удачные с продажей', 'удачные без продажи', 'неудачные с продажей','неудачные без продажи','продаж без поисков вообще'
-        fracs = [percent1, percent2, percent3,percent4,percent5] #[159, 507, 3075, 24178, 71212]
+        labels = 'удачные с продажей', 'удачные без продажи', 'неудачные с продажей','неудачные без продажи','продаж без поисков(с нового сайта) вообще'
+        fracs = [percent1, percent2, percent3,percent4,percent5] #[2548, 8355, 2578, 28793, 61719] [159, 507, 3075, 24178, 71212]
 
         plt.pie(fracs, labels=labels, autopct='%1.1f%%', shadow=False)
         plt.title('Виды цепочек действий пользователей')

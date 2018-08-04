@@ -211,7 +211,7 @@ def main():
 
 
 
-
+    """
      #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     f = elastic.elastic_queries_new_logic.region_brand
     search_plots_factory.slice_col1 = "region"
@@ -229,11 +229,13 @@ def main():
     search_plots_factory.slice_col1 = "brand"
     search_plots_factory.slice_col2 = "group"
     search_plots_factory.create_heatmap(plot_heatmap, f, '% удачных поисков, Бренд vs Товарная группа', (90, 44))
+    """
+
 
 
     #теперь построим хитмапы на по % поисков завершенных продажами в 3 разрезах тоже
 
-    sales_plots_factory = elastic.elastic_queries_new_logic.Sales_plots_factory(search_plots_factory, False)
+    sales_plots_factory = elastic.elastic_queries_new_logic.Sales_plots_factory(search_plots_factory, True)
 
     sales_plots_factory.get_statistics_of_serches_and_sales()
     f = elastic.elastic_queries_new_logic.region_brand
