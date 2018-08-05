@@ -12,10 +12,13 @@ import requests
 import warnings
 import time
 import collections
-#import searches.searches
-#from searches import searches
+import searches
+#from searches.searches import worker
 from validate.validate_searches import Availebness_in_1c
 from  frame_partial_reader.frame_partial_reader import Frame_partial_reader
+import os
+import math
+from multiprocessing import Process, Manager, Queue
 warnings.filterwarnings('ignore')
 
 """
@@ -190,8 +193,10 @@ class Searches_in_input_field_event(Base_Elastic):
 
 class Search_results_events(Base_Elastic):
 
-    def __init__(self):
-        self.from_timestamp = 1530403200
+    def __init__(self,shared_dict,from_timestamp=0,time_to=0):
+        self.from_timestamp = from_timestamp#1530403200
+        self.to_timestamp = time_to
+
         #self.list_of_search_uids = list_of_search_uids
 
         # создаем df в котором будут в каждой строке инфа по поиску запчасти, колонки искомый артикул?, результат поиска(1/0, удачный/неудачный), бренд, регион, товарная группа,
@@ -206,21 +211,28 @@ class Search_results_events(Base_Elastic):
 
 
 
-        f = pd.read_csv("searches.csv")
+        #f = pd.read_csv("searches.csv")
 
-        self.list_of_search_uids_of_searches_events_ended_with_sales = f["search_uid"].unique()
-
-
-        pr = Frame_partial_reader()
-        pr.read("parts_with_sg_mg.csv")
+        #self.list_of_search_uids_of_searches_events_ended_with_sales = f["search_uid"].unique()
 
 
+        #pr = Frame_partial_reader()
+        #pr.read("parts_with_sg_mg.csv")
 
+        self.goods_classifier = shared_dict["goods_classifier"]
+        # self.goods_classifier = pr.nsi_dict#это для тестирования!
+
+        self.brands_dict = shared_dict["brands_dict"]
+        self.groups_dict = shared_dict["groups_dict"]
+
+        """
         self.goods_classifier = pr.parse_result
         #self.goods_classifier = pr.nsi_dict#это для тестирования!
 
         self.brands_dict = pr.brands
         self.groups_dict = pr.groups
+        """
+
         #self.articles_dict = pr.articles
 
         self.regions_dict = collections.OrderedDict()
@@ -308,6 +320,7 @@ class Search_results_events(Base_Elastic):
     def get_query(self,q,list_of_args=list()):
 
         list_of_args.append(str(self.from_timestamp))
+        list_of_args.append(str(self.to_timestamp))
 
         query = q(list_of_args)
         return query
@@ -699,8 +712,8 @@ def query_make3(list_of_args):
     query = {
        "bool": {
               "must": [
-                {"range": {"timestamp": {"gt": gt}}},
-                {"range": {"timestamp": {"lte": 1533081600}}},
+                {"range": {"timestamp": {"gt": gt, "lt": list_of_args[len(list_of_args)-1]}}},
+
                 {
                     "match": {
                         "is_internal_user": False
@@ -851,6 +864,7 @@ def query_make5(list_of_args):
 
 
 
+
 class Search_plots_factory():
     first_timestamp_from_query = 0
     def __init__(self):
@@ -873,7 +887,7 @@ class Search_plots_factory():
 
 
 
-    def get_main_dataframe(self, only_our_brands=False,from_db=True):#получает главный фрейм из бд или файла и сохраняет его в атрибут класса, для дальнейшего доступа к нему откуда угодно
+    def get_main_dataframe(self, only_our_brands=False,from_db=True,from_t=0,to_t=0):#получает главный фрейм из бд или файла и сохраняет его в атрибут класса, для дальнейшего доступа к нему откуда угодно
 
         #todo пропустить весь главный фрейм через фильтр с нашими брендами!, там написаны в ручную имена товарных групп, надо как-то это делать вручную!
         #пока оставим как есть все!
@@ -903,33 +917,62 @@ class Search_plots_factory():
             # searches_input_field = Searches_in_input_field_event()
             # searches_input_field.get_data(q, index, timestampe_field_name)
             # q = query_make
-            search_results = Search_results_events()  # searches_input_field.list_of_search_uids передавать когда понадобится фильтрация по мобытию вставки номера детали в строку поиска
-            #q = query_make3
-            q = search_results.test_query
-            search_results.get_data(q, self.index, self.timestampe_field_name)
-            search_results.types_of_results.to_csv("test_10000.csv", index=False)
+            #todo делим весь временной промежуток на равные участки по количеству воркеров получаем начало/конец временных отрезков
 
-            self.main_frame = search_results.all_searches
-            self.brand_dict = search_results.brands_dict
-            self.group_dict = search_results.groups_dict
-            self.region_dict = search_results.regions_dict
-            search_results.goods_classifier = {}
-            #self.goods_classifier = search_results.goods_classifier
+            #1533081600 1530403200
+            all_period = to_t - from_t
+            worker_interval_size = int(math.floor(all_period/4))
 
-            #self.founded_several_combinations = search_results.founded_several_combinations
-            #self.not_succsess_searches = search_results.not_succsess
+            intervals = [(n, min(n+worker_interval_size, to_t)) for n in range(from_t, to_t, worker_interval_size)]
+            procs = []
+            #manager = Manager()  # create only 1 mgr
+            #shared_dict = manager.dict()  # create only 1 dict
 
-            #special = pd.DataFrame(columns=["Data"])
-            #special.loc[len(special)] = [self.not_succsess_searches]
-            #special.to_csv('special.csv')#сохранить в файл
+            #tmp_shared_dict = {}
+            q = Queue()
 
-            #self.draw_statistics(search_results)
+            #tmp_shared_dict["main_frame"] = []
+            #tmp_shared_dict["brand_dict"] = []
+            #tmp_shared_dict["group_dict"] = []
+            #tmp_shared_dict["region_dict"] = []
+            pr = Frame_partial_reader()
+            pr.read("parts_with_sg_mg.csv")
+            #tmp_shared_dict["goods_classifier"] = pr.parse_result
+            # self.goods_classifier = pr.nsi_dict#это для тестирования!
+            q.put(pr.parse_result)
+            #tmp_shared_dict["brands_dict"] = pr.brands
+            #tmp_shared_dict["groups_dict"] = pr.groups
+
+            #shared_dict.update(tmp_shared_dict)
+            #https: // stackoverflow.com / questions / 35353934 / python - manager - dict - is -very - slow - compared - to - regular - dict
+
+
+            for index, interval in enumerate(intervals):
+                proc = Process(target=searches.searches.worker, args=(interval[0], interval[1],q))
+                procs.append(proc)
+                proc.start()
+
+            for proc in procs:
+                proc.join()
+
+            #shared_dict["all_searches"] #объединить все фреймы
+            #shared_dict["brands_dict"] #объединить все словари
+            #shared_dict["brands_dict"] #объединить все словари
+            #search_results.types_of_results.to_csv("test_10000.csv", index=False)
+
+            #self.main_frame = search_results.all_searches
+            #self.brand_dict = search_results.brands_dict
+            #self.group_dict = search_results.groups_dict
+            #self.region_dict = search_results.regions_dict
+            #search_results.goods_classifier = {}
+
+
+
             self.collapse_rows_from_one_pagination_chain()
-            #before_frame.to_csv('out2.csv', index=False)
-            #self.test_frame(before_frame)
+
 
             self.main_frame.to_csv('out.csv', index=False)
-            self.first_timestamp_from_query = search_results.first_timestamp_from_query
+            #!!!!!!!!!!!!!!!!!!!!!!self.first_timestamp_from_query = search_results.first_timestamp_from_query
 
             with open('special.json', 'w') as fp:
                 json.dump(self.first_timestamp_from_query, fp)
@@ -1225,7 +1268,7 @@ class Sales_plots_factory(Search_plots_factory):
             df = self.main_frame
             sales = Search_sales(df["Search_uid"], 1530403200)#1530403200 self.first_timestamp_from_query ранний timestamp записали todo когда из файла извлечено то лишняя колонка?
             q = query_make4
-            sales.get_data(q, search_plots_factory.index, search_plots_factory.timestampe_field_name,size=1000)
+            sales.get_data(q,size=1000)
 
             sales.sales_without_searches.to_csv("sales_without_searches2.csv", index=False)
             sales.sales.to_csv("sales2.csv", index=False)
