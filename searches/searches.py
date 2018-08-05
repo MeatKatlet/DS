@@ -10,7 +10,8 @@ from matplotlib.patches import Rectangle
 warnings.filterwarnings('ignore')
 #from searches.elastic_queries import Base_Elastic
 #from searches.elastic_queries import Searches_in_input_field_event
-#from searches.elastic_queries import Search_results_events
+#from elastic.elastic_queries_new_logic import Search_results_events
+#from elastic.elastic_queries_new_logic import query_make3
 
 #from searches.elastic_queries import run_logic
 #from searches.elastic_queries import region_brand
@@ -70,9 +71,7 @@ def heatmap(data, row_labels, col_labels, ax=None,cbar_kw={}, cbarlabel="", **kw
 
     return im#, cbar
 
-def annotate_heatmap(im, data=None, valfmt="{x:.2f}",
-                     textcolors=["black", "white"],
-                     threshold=None, **textkw):
+def annotate_heatmap(im, data=None, valfmt="{x:.2f}",textcolors=["black", "white"],threshold=None, **textkw):
     """
     A function to annotate a heatmap.
 
@@ -163,11 +162,26 @@ def plot_heatmap(percentage_of_sucsess,title,figsize):
     print("\n--------------------\n")
     print(df.index)
 
+def worker(time_from, time_to,q):
+    # -------это будет worker-----------
+    # начальное время в запросе будет свое и конечное свое
+    classifier = q.get()
+    a = 1
+    #search_results = elastic.elastic_queries_new_logic.Search_results_events(shared_dict,time_from,time_to)#1530403200
+    #q = elastic.elastic_queries_new_logic.query_make3
+    #search_results.get_data(q)
+    #shared_dict["main_frame"].append(search_results.all_searches)
+    #shared_dict["brand_dict"].append(search_results.brands_dict)
+    #shared_dict["group_dict"].append(search_results.groups_dict)
+    #shared_dict["region_dict"].append(search_results.regions_dict)
+
+    # ----------конец worker---------
+
 def main():
 
     search_plots_factory = elastic.elastic_queries_new_logic.Search_plots_factory()
     #todo надо доделать в get_main_dataframe сохранени/восстановление timestamp
-    search_plots_factory.get_main_dataframe(from_db=False)#надо сделать чтобы лидо запрос из бд, и результатом будет фрейм, который мы сохраняем в файл, либо считываем из файла фрейм
+    search_plots_factory.get_main_dataframe(from_db=True,from_t=1530403200, to_t=1533081600)#надо сделать чтобы лидо запрос из бд, и результатом будет фрейм, который мы сохраняем в файл, либо считываем из файла фрейм
     #по каждому сочетанию сделать heatmap
     """
     география - бренды
