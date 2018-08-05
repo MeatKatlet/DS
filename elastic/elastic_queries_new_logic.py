@@ -43,6 +43,7 @@ json.loads(data)
 class Base_Elastic():
     first_timestamp_from_query = 0
     timestamp_for_query = 'timestamp'
+    index = 'cart_item_event'
     def __init__(self):
         self.df = pd.DataFrame()
         # self.query = ""
@@ -53,16 +54,16 @@ class Base_Elastic():
         query = q(list_of_args)
         return query
 
-    def get_data(self, q, index, timestampe_field_name,size=100):
+    def get_data(self, q,size=100):
         #query = q()
         query = self.get_query(q)
         body = {
             "size": size,
             "query": query,
-            "sort": [{timestampe_field_name: {"order": "asc"}}]}
+            "sort": [{self.timestamp_for_query: {"order": "asc"}}]}
 
         headers = {'Accept': 'application/json', 'Content-type': 'application/json'}
-        elastic_url = 'http://roesportal.rossko.local:80/' + index + '-*/_search/?size='+str(size)+'&pretty'
+        elastic_url = 'http://roesportal.rossko.local:80/' + self.index + '-*/_search/?size='+str(size)+'&pretty'
         query = json.dumps(body)
 
 
@@ -112,7 +113,7 @@ class Base_Elastic():
             body = {
                 "size": size,
                 "query": query,
-                "sort": [{timestampe_field_name: {"order": "asc"}}]}
+                "sort": [{self.timestamp_for_query: {"order": "asc"}}]}
 
             query = json.dumps(body)
 
