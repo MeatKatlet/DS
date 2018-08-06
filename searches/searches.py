@@ -232,7 +232,6 @@ def main():
     """
 
 
-
     #теперь построим хитмапы на по % поисков завершенных продажами в 3 разрезах тоже
 
     sales_plots_factory = elastic.elastic_queries_new_logic.Sales_plots_factory(search_plots_factory, True)
