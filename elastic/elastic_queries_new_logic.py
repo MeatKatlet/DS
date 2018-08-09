@@ -611,7 +611,36 @@ class Search_sales(Base_Elastic):
         query = q(list_of_args)
         return query
 
+    def query_make4(self,list_of_args):
+        if len(list_of_args) == 1:
+            gt = list_of_args[0]  # базовый timestamp будет добавлять
+            range = {"timestamp": {"gt": gt, "lt": 1533081600}}
+        else:
+            gt = list_of_args[0]  # это будет когда уже в цикле идет запрос
+            range = {"timestamp": {"gt": gt, "lt": 1533081600}}
 
+        query = {
+            "bool": {
+                "must": [
+                    {
+                        "range": range
+                    },
+
+                    {
+                        "match": {
+                            "event": "checkout"
+                        }
+                    },
+                    {
+                        "terms": {
+                            "region": ["Новосибирск", "Санкт-Петербург"]
+                        }
+                    },
+
+                ]
+            }
+        }
+        return query#получить список всех member_id Нового портала ~1500 и запросы на оформление заказа делать только по этому списку(т.е. это пользователи нового портала!)
     def do_logic(self,list_of_elements):
 
         length = len(list_of_elements)
@@ -1110,7 +1139,8 @@ class Search_plots_factory():
         df = self.create_frame_for_plot(f)
 
         df = self.add_pretty_rows_and_columns_names(df)
-
+        df = df.loc[(df != 0).any(axis=1)]
+        df = df.loc[:, (df != 0).any(axis=0)]
         writer = pd.ExcelWriter("slice_" + self.slice_col1 + "_" + self.slice_col2 +"_"+self.prefix+ '.xlsx')
         df.to_excel(writer, 'Sheet1')
 
@@ -1220,10 +1250,10 @@ class Sales_plots_factory(Search_plots_factory):
             # делаем запрос на продажи
             df = self.main_frame
             sales = Search_sales(df["Search_uid"], 1530403200)#1530403200 self.first_timestamp_from_query ранний timestamp записали todo когда из файла извлечено то лишняя колонка?
-            q = query_make4
+            q = sales.query_make4
             sales.get_data(q,size=500)
 
-            sales.sales_without_searches.to_csv("sales_without_searches2_"+self.prefix+ ".csv", index=False)
+            #sales.sales_without_searches.to_csv("sales_without_searches2_"+self.prefix+ ".csv", index=False)
             sales.sales.to_csv("sales2_"+self.prefix+ ".csv", index=False)
 
             #sales.sales_without_searches = pd.read_csv("sales_without_searches2.csv")
@@ -1256,7 +1286,7 @@ class Sales_plots_factory(Search_plots_factory):
             self.frame_all_searches_with_sales.to_csv("frame_all_searches_with_sales_"+self.prefix+ ".csv",index=False)#frame_all_searches_with_sales.csv
 
             self.sales_without_searches = sales.sales_without_searches#продажи вне диапазона id поисков, у них цепочки не начались с поисков!
-            self.sales_without_searches.to_csv("sales_without_searches_"+self.prefix+ ".csv",index=False)
+            #self.sales_without_searches.to_csv("sales_without_searches_"+self.prefix+ ".csv",index=False)
         else:
             self.frame_all_searches_with_sales = pd.read_csv("frame_all_searches_with_sales_"+self.prefix+ ".csv")#frame_all_searches_with_sales.csv
             # продажи без поисков вообще
@@ -1319,7 +1349,7 @@ class Sales_plots_factory(Search_plots_factory):
 
         labels = 'удачные с продажей', 'удачные без продажи', 'неудачные с продажей','неудачные без продажи','продаж без поисков(с нового сайта) вообще'
         fracs = [percent1, percent2, percent3,percent4,percent5] #[2548, 8355, 2578, 28793, 61719] [159, 507, 3075, 24178, 71212]
-
+        # [5009, 13088, 832, 4769, 111135] - это продажи по матрице региона(НСК и питер)
         plt.pie(fracs, labels=labels, autopct='%1.1f%%', shadow=False)
         plt.title('Виды цепочек действий пользователей')
         plt.show()
@@ -1344,9 +1374,11 @@ class Sales_plots_factory(Search_plots_factory):
         plt.show()
         """
 
+
     def create_frame_for_plot(self,f):
 
-        sliced_searches = self.create_crosstab(f,self.frame_all_searches_with_sales.query("Search_result == 1"))#разрез всего удачных поисков
+        #sliced_searches = self.create_crosstab(f,self.frame_all_searches_with_sales.query("Search_result == 1"))#разрез всего удачных поисков
+        sliced_searches = f(self.frame_all_searches_with_sales.query("Search_result == 1"))  #разрез всего удачных поисков
 
 
         percentage_of_sucsess = pd.DataFrame(index=sliced_searches.index, columns=sliced_searches.columns.values)
@@ -1368,12 +1400,13 @@ class Sales_plots_factory(Search_plots_factory):
         #переопредедяем этот метод чтобы иметь отдельный кросстабы по срезам! они нужны для расчетов %
         #можно и делать по региону - бренду запросы в self.frame_searches_with_sales_only  для расчета % в функции fill_cell_value(для подсчета количества поисков в ячейке завершенных продажей)- но это может быть дольше
 
-        self.create_crosstab(f, self.frame_sucsess_searches_with_sales)  #todo делаем слайс по удачным поискам завершенным продажей, сохраняем в атрибут
+        self.create_crosstab(f, self.frame_sucsess_searches_with_sales)  #делаем слайс по удачным поискам завершенным продажей, сохраняем в атрибут - этот % мы и должны считать от общего числа удачных поисков
 
         df = self.create_frame_for_plot(f)
 
         df = self.add_pretty_rows_and_columns_names(df)
-
+        df = df.loc[(df != 0).any(axis=1)]
+        df = df.loc[:, (df != 0).any(axis=0)]
         writer = pd.ExcelWriter("slice_sales_" + self.slice_col1 + "_" + self.slice_col2 + "_"+self.prefix+ '.xlsx')
         df.to_excel(writer, 'Sheet1')
 
@@ -1382,7 +1415,8 @@ class Sales_plots_factory(Search_plots_factory):
         s = self.frame_sucsess_searches_with_sales# в абсолютных числах происки завершенные продажей
         s2 = pd.crosstab(s[self.slice_col1], s[self.slice_col2])
         s2 = self.add_pretty_rows_and_columns_names(s2)  # разрез в абсолютных величинах по удачным
-
+        s2 = s2.loc[(s2 != 0).any(axis=1)]
+        s2 = s2.loc[:, (s2 != 0).any(axis=0)]
         writer = pd.ExcelWriter("slice_sales_absolute_" + self.slice_col1 + "_" + self.slice_col2 +"_"+self.prefix+  '.xlsx')
         s2.to_excel(writer, 'Sheet1')
         writer.save()
@@ -1405,7 +1439,7 @@ class Sales_plots_factory(Search_plots_factory):
 
                 #assert (slice.loc[row_name][col_name] == 0),"Slice "+"slice_"+self.slice_col1+"_"+self.slice_col2+" Not equal values in crosstab of all searches and in crosstab of serches ended with sales"
             else:
-                percentage_of_saled_searches_in_cell = (slice.loc[row_name][col_name]*100) / sliced_searches.loc[row_name][col_name]
+                percentage_of_saled_searches_in_cell = slice.loc[row_name][col_name] / sliced_searches.loc[row_name][col_name]
 
                 #assert (slice.loc[row_name][col_name] != 0), "Slice " + "slice_"+self.slice_col1+"_"+self.slice_col2 + " Not equal values in crosstab of all searches and in crosstab of serches ended with sales"
 
