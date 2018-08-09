@@ -25,7 +25,7 @@ def main():
 
     search_plots_factory = region_matrix.only_region_matrix_logic.Only_matrix_search_plots_factory()
     #todo надо доделать в get_main_dataframe сохранени/восстановление timestamp
-    search_plots_factory.get_main_dataframe(from_db=True)#надо сделать чтобы лидо запрос из бд, и результатом будет фрейм, который мы сохраняем в файл, либо считываем из файла фрейм
+    search_plots_factory.get_main_dataframe(from_db=False)#надо сделать чтобы лидо запрос из бд, и результатом будет фрейм, который мы сохраняем в файл, либо считываем из файла фрейм
     #по каждому сочетанию сделать heatmap
 
 
@@ -49,11 +49,9 @@ def main():
 
 
 
-
-
     #теперь построим хитмапы на по % поисков завершенных продажами в 3 разрезах тоже
 
-    sales_plots_factory = elastic.elastic_queries_new_logic.Sales_plots_factory(search_plots_factory, True)
+    sales_plots_factory = elastic.elastic_queries_new_logic.Sales_plots_factory(search_plots_factory, False)
 
     sales_plots_factory.get_statistics_of_serches_and_sales()
     f = elastic.elastic_queries_new_logic.region_brand

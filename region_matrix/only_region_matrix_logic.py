@@ -9,12 +9,22 @@ class Only_matrix_Search_results_events(Search_results_events):
 
     def add_matrix_dictionary_to_class(self):
 
-
+        self.region_article ={}
+        self.region_article["Новосибирск"] = {}
+        self.region_article["Санкт-Петербург"] = {}
+        self.region_nsi ={}
+        self.region_nsi["Новосибирск"] ={}
+        self.region_nsi["Санкт-Петербург"] ={}
         #names=["Nom_Name","Nom_Code","Artikul","SKlad_Code","SKlad_Name","CFO_Code","CFO_Name","NomGr","MarkGr","SinMarkGr","Brand"]
         matrix = pd.read_csv("matrixNom.csv", sep=';')
         #matrix = matrix[matrix["CFO_Name"]=="Новосибирск",matrix["CFO_Name"]=="Санкт-Петербург"]
         array = ["Новосибирск", "Санкт-Петербург"]
         self.matrix = matrix.loc[matrix["CFO_Name"].isin(array)]
+        rows = self.matrix.shape[0]
+        for row in range(0,rows,1):
+            line = self.matrix.iloc[row]
+            self.region_article[line[6]][line[2]] = 1
+            self.region_nsi[line[6]][line[1]] = 1
 
         #u = matrix["Nom_Code"].unique()
         #length = len(u)
@@ -60,9 +70,9 @@ class Only_matrix_Search_results_events(Search_results_events):
             }
         }
         return query
-    def check_exist_in_nsi(self,nsi,region):
-        l = self.matrix[(self.matrix["CFO_Name"]==region)& (self.matrix["Nom_Code"]==nsi)].shape[0]
-        if l>0:
+    def check_exist_in_nsi(self,nsi,region):#todo по ключу надо чтобы было O(1)
+        #l = self.matrix[(self.matrix["CFO_Name"]==region)& (self.matrix["Nom_Code"]==nsi)].shape[0]
+        if nsi in self.region_nsi[region]:
             return True
         return False
 
@@ -73,20 +83,22 @@ class Only_matrix_Search_results_events(Search_results_events):
         without_dies_suffix = without_spaces_and_defises.split("#")[0]
         result = False
         q= 0
-
-        if self.matrix[(self.matrix["CFO_Name"] == region) & (self.matrix["Artikul"] == raw)].shape[0]>0:
+        if raw in self.region_article[region]:
+        #if self.matrix[(self.matrix["CFO_Name"] == region) & (self.matrix["Artikul"] == raw)].shape[0]>0:
             result = True
             q = raw
-
-        elif self.matrix[(self.matrix["CFO_Name"] == region) & (self.matrix["Artikul"] == without_spaces)].shape[0]>0:
+        elif without_spaces in self.region_article[region]:
+        #elif self.matrix[(self.matrix["CFO_Name"] == region) & (self.matrix["Artikul"] == without_spaces)].shape[0]>0:
             result = True
             q = without_spaces
-
-        elif self.matrix[(self.matrix["CFO_Name"] == region) & (self.matrix["Artikul"] == without_spaces_and_defises)].shape[0]>0:
+        elif without_spaces_and_defises in self.region_article[region]:
+       # elif self.matrix[(self.matrix["CFO_Name"] == region) & (self.matrix["Artikul"] == without_spaces_and_defises)].shape[0]>0:
             result = True
             q = without_spaces_and_defises
 
-        elif self.matrix[(self.matrix["CFO_Name"] == region) & (self.matrix["Artikul"] == without_dies_suffix)].shape[0]>0:
+
+        elif without_dies_suffix in self.region_article[region]:
+        #elif self.matrix[(self.matrix["CFO_Name"] == region) & (self.matrix["Artikul"] == without_dies_suffix)].shape[0]>0:
             result = True
             q = without_dies_suffix
 
