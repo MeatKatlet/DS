@@ -25,7 +25,7 @@ def main():
 
     search_plots_factory = region_matrix.only_region_matrix_logic.Only_matrix_search_plots_factory()
     #todo надо доделать в get_main_dataframe сохранени/восстановление timestamp
-    search_plots_factory.get_main_dataframe(from_db=False)#надо сделать чтобы лидо запрос из бд, и результатом будет фрейм, который мы сохраняем в файл, либо считываем из файла фрейм
+    search_plots_factory.get_main_dataframe(from_db=True)#надо сделать чтобы лидо запрос из бд, и результатом будет фрейм, который мы сохраняем в файл, либо считываем из файла фрейм
     #по каждому сочетанию сделать heatmap
 
 

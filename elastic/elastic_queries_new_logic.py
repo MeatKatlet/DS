@@ -233,6 +233,7 @@ class Search_results_events(Base_Elastic):
 
         self.not_founded_out_of_articles_range = 0
         self.founded_several_combinations = {}
+        self.founded_several_combinations2 = 0
 
         #self.not_succsess2 = 0
         #self.count = 0
@@ -395,9 +396,9 @@ class Search_results_events(Base_Elastic):
                                         #res[1] - это tuple из комбинации кодов (бренд, группа)
 
                                         if res[1] not in brand_group_variants:
-                                            brand_group_variants[res[1]] = 1
-                                        else:
-                                            brand_group_variants[res[1]] += 1
+                                            brand_group_variants[res[1]] = {"cards":0,"carts":0,"preview":0}
+                                        #else:
+                                            #brand_group_variants[res[1]] ={}
 
 
 
@@ -407,9 +408,9 @@ class Search_results_events(Base_Elastic):
 
 
                                         if res[1] not in brand_group_variants:
-                                            brand_group_variants[res[1]] = 1
-                                        else:
-                                            brand_group_variants[res[1]] += 1
+                                            brand_group_variants[res[1]] = {"cards":0,"carts":0,"preview":0}
+                                        #else:
+                                            #brand_group_variants[res[1]] += 1
 
                                     #else:
                                         #tcp +=1
@@ -485,7 +486,7 @@ class Search_results_events(Base_Elastic):
                     if len(self.goods_classifier[q][1]) > 1:#здесь только так может быть!
                         #todo какой бренд группу брать?
                         #self.founded_several_combinations += 1#46 таких
-                        self.founded_several_combinations[search_uid] = 1#пагинация должна уменьшить количество конфликтных ситуаций
+                        self.founded_several_combinations[search_uid] = brand_group_variants#пагинация должна уменьшить количество конфликтных ситуаций
                         #удалять строку из фрейма если из-за пагинации там уже что-то есть
                         #if (self.all_searches['Search_uid'] == search_uid).any() == True:
                             #self.all_searches.drop(self.all_searches[self.all_searches['Search_uid'] == search_uid].index,inplace=True)
