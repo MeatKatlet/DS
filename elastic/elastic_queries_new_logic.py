@@ -233,7 +233,7 @@ class Search_results_events(Base_Elastic):
 
         self.not_founded_out_of_articles_range = 0
         self.founded_several_combinations = {}
-        self.founded_several_combinations2 = 0
+        #self.founded_several_combinations2 = 0
 
         #self.not_succsess2 = 0
         #self.count = 0

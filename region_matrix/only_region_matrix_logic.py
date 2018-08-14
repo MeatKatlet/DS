@@ -4,7 +4,7 @@ from elastic.elastic_queries_new_logic import Base_Elastic
 import json
 import pandas as pd
 import math
-
+import pickle
 
 class Only_matrix_Search_results_events(Search_results_events):
     #nsi_not_in_matrix = False
@@ -154,28 +154,33 @@ class Only_matrix_Search_results_events(Search_results_events):
 
                     for j in range(0, length3, 1):
                         element_of_search_results = results_group_item["search_results"][j]
+
+
+                        link_parts = element_of_search_results["link"].split("=")
+                        nsi = link_parts[1]  # из ссылки извлекаем
+                        # совпадение по бренду/товарной группе из поисковой строки
+                        if len(link_parts) > 2:
+                            a = 1
+
+                        if self.check_exist_in_nsi(nsi, region) == False:
+                            continue  # пропускаем его как будто его нет, т.к. он не в матрице региона
+
                         empty_result = False
 
+                        res = self.check_presence_in_list(search_query, nsi)  # [result, brand_group_combination]
+
+                        if res[0] == True and res[1] not in brand_group_variants:
+                            brand_group_variants[res[1]] = {"available":0,"carts":0,"cards":0,"preview":0}
+
                         # отсутствующая в наличии запчасть это неудачный поиск!
-                        if "part" in element_of_search_results and "brand_name" in element_of_search_results and "market_group_name" in element_of_search_results:
+                        if "part" in element_of_search_results:
                             #availably += 1
 
-                            brand = element_of_search_results["brand_name"]#.replace(r"'", "").replace("\\","")
-                            group = element_of_search_results["market_group_name"]
-                            link_parts = element_of_search_results["link"].split("=")
-                            nsi = link_parts[1] #из ссылки извлекаем
-                            #совпадение по бренду/товарной группе из поисковой строки
-                            if len(link_parts)>2:
-                                a=1
-
-                            if self.check_exist_in_nsi(nsi,region)==False:
-
-                                continue#пропускаем его как будто его нет
-
-                            res = self.check_presence_in_list(search_query, nsi)#[result, brand_group_combination]
+                            #brand = element_of_search_results["brand_name"]#.replace(r"'", "").replace("\\","")
+                            #group = element_of_search_results["market_group_name"]
 
 
-                            if brand!= "" and group!= "" and res[0] == True:#есть в списке сочетаний брендов и групп по этому номеру товара
+                            if res[0] == True:#есть в списке сочетаний брендов и групп по этому номеру товара
                                 #query_dictionary_brand_group_overlap += 1
 
                                 #search_result = 1  # удачный поиск
@@ -190,10 +195,8 @@ class Only_matrix_Search_results_events(Search_results_events):
 
                                         #res[1] - это tuple из комбинации кодов (бренд, группа)
 
-                                        if res[1] not in brand_group_variants:
-                                            brand_group_variants[res[1]] = 1
-                                        else:
-                                            brand_group_variants[res[1]] += 1
+
+                                        brand_group_variants[res[1]]["available"] = 1#есть наличие в этой группе выдачи
 
 
 
@@ -201,11 +204,9 @@ class Only_matrix_Search_results_events(Search_results_events):
 
                                         succsess_searches_count += 1
 
+                                        brand_group_variants[res[1]]["available"] = 1  # есть наличие в этой группе выдачи
 
-                                        if res[1] not in brand_group_variants:
-                                            brand_group_variants[res[1]] = 1
-                                        else:
-                                            brand_group_variants[res[1]] += 1
+
 
                                     #else:
                                         #tcp +=1
@@ -213,18 +214,21 @@ class Only_matrix_Search_results_events(Search_results_events):
 
 
 
-                if succsess_searches_count == 0 and empty_result == False:#ни одного - неудачный + непустые выдачи были
+                if succsess_searches_count == 0 and empty_result == False and len(brand_group_variants)>0:#ни одного - неудачный + непустые выдачи были
                     r = self.check_variants(search_query)
                     q = r[1]
                     if r[0]:#искал то что у нас есть обычно(может быть в принципе)!
                         #либо юзер подразумевал сразу несколько сочетаний брендов и групп, которые ищет
-                        if len(self.goods_classifier[q][1])>1:#
+                        if len(brand_group_variants)>1:#if len(self.goods_classifier[q][1])>1:#
 #2897
-                            self.not_founded_several_brands += 1#5379 - не было совпадений в выдаче с тем что подразумевается под номером детали(совпадений с наличием?)
+                            #self.not_founded_several_brands += 1#5379 - не было совпадений в выдаче с тем что подразумевается под номером детали(совпадений с наличием?)
+                            self.founded_several_combinations[search_uid] = brand_group_variants
                         # либо одно сочетание бренда группы которое ищет
-                        elif len(self.goods_classifier[q][1])==1:#т.е. то что не нашел то и записываем в ответ
-                            brand_code = list(self.goods_classifier[q][1].keys())[0][0]
-                            group_code =  list(self.goods_classifier[q][1].keys())[0][1]
+                        elif len(brand_group_variants)==1:# elif len(self.goods_classifier[q][1])==1:#т.е. то что не нашел то и записываем в ответ
+                            #brand_code = list(self.goods_classifier[q][1].keys())[0][0]
+                            #group_code =  list(self.goods_classifier[q][1].keys())[0][1]
+                            brand_code = list(brand_group_variants.keys())[0][0]
+                            group_code = list(brand_group_variants.keys())[0][1]
 
 
                             self.add_to_frame(search_uid, q, brand_code, region, group_code, 0)
@@ -233,60 +237,48 @@ class Only_matrix_Search_results_events(Search_results_events):
                         self.not_founded_out_of_articles_range += 1#12755
 
 
-                elif succsess_searches_count == 1 and len(brand_group_variants)==1:#одно совпадение но с одним и тем же
-                    r = self.check_variants(search_query)
-                    q = r[1]
+                elif succsess_searches_count == 1 and len(brand_group_variants)>0:#одно совпадение но с одним и тем же
+
 
                     # либо юзер подразумевал сразу несколько сочетаний брендов и групп, которые ищет
-                    if len(self.goods_classifier[q][1])>1:#подразумевал несколько сочетаний а нашел 1 совпадение из подразумеваемых с выжачей
+                    if len(brand_group_variants) > 1:  #if len(self.goods_classifier[q][1])>1:#подразумевал несколько сочетаний а нашел 1 совпадение из подразумеваемых с выжачей
                         #todo какой бренд/группу брать для этого? правильно ли я сделал, ведь юзер подразумевает несколько сочетаний
                         #получается те которые нашел!, совпал 1 раз по наличию со списком подразумеваемого
 
-                        brand_code = list(brand_group_variants.keys())[0][0]
-                        group_code = list(brand_group_variants.keys())[0][1]
+                        #brand_code = list(brand_group_variants.keys())[0][0]
+                        #group_code = list(brand_group_variants.keys())[0][1]
 
 
-                        self.add_to_frame(search_uid, q, brand_code, region, group_code, 1)
-
+                        #self.add_to_frame(search_uid, q, brand_code, region, group_code, 1)
+                        self.founded_several_combinations[search_uid] = brand_group_variants
 
                     # либо одно сочетание бренда группы которое ищет
-                    elif len(self.goods_classifier[q][0]) == 1:
+                    elif len(brand_group_variants) == 1:  #elif len(self.goods_classifier[q][0]) == 1:
+                        r = self.check_variants(search_query)
+                        q = r[1]
                         brand_code = list(brand_group_variants.keys())[0][0]
                         group_code = list(brand_group_variants.keys())[0][1]
 
                         self.add_to_frame(search_uid, q, brand_code, region, group_code, 1)
 
-                elif succsess_searches_count > 1 and len(brand_group_variants)==1:#несколько совпадений но с одним и тем же
-                    r = self.check_variants(search_query)
-                    q = r[1]
+                elif succsess_searches_count > 1 and len(brand_group_variants) > 0:#несколько совпадений но с одним и тем же
+
                     # либо юзер подразумевал сразу несколько сочетаний брендов и групп, которые ищет
-                    if len(self.goods_classifier[q][1])>1:
-                        brand_code = list(brand_group_variants.keys())[0][0]
-                        group_code = list(brand_group_variants.keys())[0][1]
+                    if len(brand_group_variants) > 1:  #if len(self.goods_classifier[q][1])>1:
+                        #brand_code = list(brand_group_variants.keys())[0][0]
+                        #group_code = list(brand_group_variants.keys())[0][1]
 
-                        self.add_to_frame(search_uid, q, brand_code, region, group_code, 1)
+                        #self.add_to_frame(search_uid, q, brand_code, region, group_code, 1)
+                        self.founded_several_combinations[search_uid] = brand_group_variants
                     # либо одно сочетание бренда группы которое ищет
-                    elif len(self.goods_classifier[q][1]) == 1:
+                    elif len(brand_group_variants) == 1:  #elif len(self.goods_classifier[q][1]) == 1:
+                        r = self.check_variants(search_query)
+                        q = r[1]
                         brand_code = list(brand_group_variants.keys())[0][0]
                         group_code = list(brand_group_variants.keys())[0][1]
 
                         self.add_to_frame(search_uid,q, brand_code, region, group_code, 1)
 
-                elif succsess_searches_count > 1 and len(brand_group_variants) > 1:  # несколько совпадений но с разными сочетаниями
-                    r = self.check_variants(search_query)
-                    q = r[1]
-                    if len(self.goods_classifier[q][1]) > 1:#здесь только так может быть!
-                        #todo какой бренд группу брать?268 таких
-                        #self.founded_several_combinations += 1#46 таких
-                        self.founded_several_combinations[search_uid] = 1#пагинация должна уменьшить количество конфликтных ситуаций
-                        self.founded_several_combinations2 += 1
-
-                        #удалять строку из фрейма если из-за пагинации там уже что-то есть
-                        #if (self.all_searches['Search_uid'] == search_uid).any() == True:
-                            #self.all_searches.drop(self.all_searches[self.all_searches['Search_uid'] == search_uid].index,inplace=True)
-
-
-                #статистику по одиночным посчитаем по self.all_searches
 
 class Only_matrix_autocomplete_and_single_result_events(Only_matrix_Search_results_events):
     def __init__(self,brands_dict,groups_dict,all_searches_dict):
@@ -362,13 +354,14 @@ class Only_matrix_autocomplete_and_single_result_events(Only_matrix_Search_resul
 
 class Only_matrix_Resolve_Conflict_situations(Search_results_events):
     #на вход список search_uid выдач с конфликтными ситуациями
-    def __init__(self,from_timestamp,brand_dict,group_dict,founded_several_combinations):
+    def __init__(self,from_timestamp,brand_dict,group_dict,founded_several_combinations,all_searches_dict):
         self.from_timestamp = from_timestamp
         self.brand_dict = brand_dict
         self.group_dict = group_dict
-
+        self.all_searches_dict = all_searches_dict
         self.result_chains = {}
         self.founded_several_combinations = founded_several_combinations
+        self.list_of_conflict_search_uids = []
 
     def query_for_search_uids(self,list_of_args):
         if len(list_of_args) == 1:
@@ -423,7 +416,7 @@ class Only_matrix_Resolve_Conflict_situations(Search_results_events):
         q = self.query_for_search_uids
         l = len(conflict_search_uid_list)
 
-        total_parts = int(math.ceil(l/10000))
+        total_parts = int(math.ceil(l/10000))+1
         prev_part = 0
 
         for part_of_list in range(1,total_parts,1):
@@ -441,6 +434,8 @@ class Only_matrix_Resolve_Conflict_situations(Search_results_events):
 
     def resolve(self):
         #self.founded_several_combinations[search_uid]# - найденные комбинации! брендов и групп под этим id
+
+
         resolved = 0
         for search_uid, elem in self.result_chains.items():
             events = sorted(elem)#todo должно быть по возрастанию времени
@@ -465,33 +460,49 @@ class Only_matrix_Resolve_Conflict_situations(Search_results_events):
                 #elif stage > 0 and event["event"] != "add_to_cart" and event["event"] != "product_card_view":
                     #not_target_event += 1
                 elif stage > 0 and event["event"] == "overview_product":
-                    brand =  # товара который смотрят в превью
-                    group =  # товара который смотрят в превью
-                    brand_code = self.brand_dict[brand]
-                    group_code = self.group_dict[group]
+                    article = event["product"]["article"]# товара который смотрят в превью
+                    nsi = event["product"]["nsi"]# товара который смотрят в превью
+                    res = self.check_presence_in_list(article, nsi)#[result, brand_group_combination]
+                    if res[0] == True:
 
-                    if (brand_code, group_code) in self.founded_several_combinations[search_uid]:
-                        self.founded_several_combinations[search_uid][(brand_code, group_code)]["preview"] += 1
+                        brand_code = res[1][0]#self.brand_dict[brand]
+                        group_code = res[1][1]#self.group_dict[group]
+
+                        if (brand_code, group_code) in self.founded_several_combinations[search_uid]:
+                            self.founded_several_combinations[search_uid][(brand_code, group_code)]["preview"] += 1
+                    else:
+                        a = 1
                     #он мог смотреть те вещи которые не в наличии, при том что есть искосые в наличии?
                 elif stage > 0 and event["event"] == "add_to_cart":
-                    brand = #товара который положили в корзину
-                    group = #товара который положили в корзину
-                    brand_code = self.brand_dict[brand]
-                    group_code = self.group_dict[group]
-                    if (brand_code,group_code) in self.founded_several_combinations[search_uid]:
+                    #todo он мог положить в корзину аналог, поэтому по бренду могло не совпасть!
+                    #надо чтобы бренд и грцппа совпадали с брендом и грцппой поиска?
+                    article = event["article"] #товара который положили в корзину
+                    nsi = event["nsi"]#товара который положили в корзину
+                    res = self.check_presence_in_list(article, nsi)  # [result, brand_group_combination]
+                    if res[0] == True:
+                        brand_code = res[1][0]#self.brand_dict[brand]
+                        group_code = res[1][1]#self.group_dict[group]
+                        if (brand_code,group_code) in self.founded_several_combinations[search_uid]:#в выдаче поиска есть такая группа(сочетание бренда - группы)
 
-                        self.founded_several_combinations[search_uid][(brand_code, group_code)]["cards"] += 1
+                            self.founded_several_combinations[search_uid][(brand_code, group_code)]["cards"] += 1
+                    else:
+                        a = 1
 
                     #add_to_cart +=1
                 elif stage > 0 and event["event"] == "product_card_view":
-                    brand =  # товара который смотрят в карточке
-                    group =  # товара который смотрят в карточке
-                    brand_code = self.brand_dict[brand]
-                    group_code = self.group_dict[group]
+                    #в цепочке должна быть карточка с типом - переход из выдачи
+                    article = event["article"]# товара который смотрят в карточке
+                    nsi = event["nsi"]# товара который смотрят в карточке
 
-                    if (brand_code, group_code) in self.founded_several_combinations[search_uid]:
-                        self.founded_several_combinations[search_uid][(brand_code, group_code)]["carts"] += 1
+                    res = self.check_presence_in_list(article, nsi)  # [result, brand_group_combination]
+                    if res[0]==True:
+                        brand_code = res[1][0]#self.brand_dict[brand]
+                        group_code = res[1][1]#self.group_dict[group]
 
+                        if (brand_code, group_code) in self.founded_several_combinations[search_uid]:
+                            self.founded_several_combinations[search_uid][(brand_code, group_code)]["carts"] += 1
+                    else:
+                        a=1
                     #card_view +=1
                 #или карточка товара
                 #или корзина
@@ -509,29 +520,31 @@ class Only_matrix_Resolve_Conflict_situations(Search_results_events):
                 if elem["carts"]>0:
                     cart += 1
                     cart_combination = brand_group_combination
+                    cart_available = elem["available"]  # есть ли в наличии/удачный или неудачный поиск
                 elif elem["cards"]>0:
                     card += 1
                     card_combination = brand_group_combination
+                    card_available = elem["available"]
                 elif elem["preview"]>0:
                     view += 1
                     view_combination = brand_group_combination
-
+                    view_available = elem["available"]#есть ли в наличии
             if card == 1 and cart == 0:
                 #разрешен
                 is_search_result_resolved = True
-                self.add_to_frame(search_uid, search_query, card_combination[0], region, card_combination[1], 1)
+                self.add_to_frame(search_uid, search_query, card_combination[0], region, card_combination[1], card_available)
             elif card == 0 and view == 1 and cart == 0:
                 # разрешен
                 is_search_result_resolved = True
-                self.add_to_frame(search_uid, search_query, view_combination[0], region, view_combination[1], 1)
+                self.add_to_frame(search_uid, search_query, view_combination[0], region, view_combination[1], view_available)
             elif card == 0 and cart == 1:
                 # разрешен
                 is_search_result_resolved = True
-                self.add_to_frame(search_uid, search_query, cart_combination[0], region, cart_combination[1], 1)
+                self.add_to_frame(search_uid, search_query, cart_combination[0], region, cart_combination[1], cart_available)
             elif card >= 1 and cart == 1:
                 #разрешен
                 is_search_result_resolved = True
-                self.add_to_frame(search_uid, search_query, cart_combination[0], region, cart_combination[1], 1)
+                self.add_to_frame(search_uid, search_query, cart_combination[0], region, cart_combination[1], cart_available)
 
             if is_search_result_resolved==True:
                 resolved +=1
@@ -549,14 +562,40 @@ class Only_matrix_search_plots_factory(Search_plots_factory):
             q = search_results.query_make3
             #q = search_results.test_query
             search_results.get_data(q)
+
+            with open(r"search_resultst.pickle", "wb") as output_file:
+                 pickle.dump(search_results, output_file)
+
+
+            tmpframe = pd.DataFrame.from_dict(search_results.all_searches_dict, orient='index',columns=['Search_uid', 'Search_query', 'brand', 'region', 'group','Search_result'])
+            tmpframe.to_csv('out_tmp_' + self.prefix + '.csv', index=False)
             #search_results.types_of_results.to_csv("test_10000.csv", index=False)
+            #добавляем однозначные поиски
             additional_search_results = Only_matrix_autocomplete_and_single_result_events(search_results.brands_dict,search_results.groups_dict,search_results.all_searches_dict)
 
             q = additional_search_results.query_get_autocompletes_and_single_suggest
             additional_search_results.get_data(q)
+            tmpframe = pd.DataFrame.from_dict(additional_search_results.all_searches_dict, orient='index',columns=['Search_uid', 'Search_query', 'brand', 'region', 'group','Search_result'])
+            tmpframe.to_csv('out_tmp_' + self.prefix + '.csv', index=False)
+
+            with open(r"additional_search_results.pickle", "wb") as output_file:
+                 pickle.dump(search_results, output_file)
+
+            #разрешаем конфликты
+            resolver = Only_matrix_Resolve_Conflict_situations(
+                search_results.from_timestamp,
+                search_results.brands_dict,
+                search_results.groups_dict,
+                search_results.founded_several_combinations,
+                additional_search_results.all_searches_dict
+            )
+            resolver.resolve_dispatcher(list(search_results.founded_several_combinations.keys()))
+            with open(r"resolver.pickle", "wb") as output_file:
+                 pickle.dump(search_results, output_file)
+
 
             #todo проверить чтобы search_results.all_searches_dict было больше чем до автокомлита!
-            self.main_frame = pd.DataFrame.from_dict(search_results.all_searches_dict, orient='index',columns=['Search_uid','Search_query', 'brand', 'region', 'group', 'Search_result'])
+            self.main_frame = pd.DataFrame.from_dict(resolver.all_searches_dict, orient='index',columns=['Search_uid','Search_query', 'brand', 'region', 'group', 'Search_result'])
             search_results.all_searches_dict = {}
             #self.main_frame = search_results.all_searches
             self.brand_dict = search_results.brands_dict
