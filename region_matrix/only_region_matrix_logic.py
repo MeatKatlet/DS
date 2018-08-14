@@ -281,11 +281,14 @@ class Only_matrix_Search_results_events(Search_results_events):
 
 
 class Only_matrix_autocomplete_and_single_result_events(Only_matrix_Search_results_events):
-    def __init__(self,brands_dict,groups_dict,all_searches_dict):
+    def __init__(self,brands_dict,groups_dict,all_searches_dict,from_timestamp,region_article,goods_classifier):
 
         self.brands_dict = brands_dict
         self.groups_dict = groups_dict
         self.all_searches_dict = all_searches_dict
+        self.from_timestamp = from_timestamp
+        self.region_article = region_article
+        self.goods_classifier = goods_classifier
 
     def query_get_autocompletes_and_single_suggest(self, list_of_args):
 
@@ -354,7 +357,7 @@ class Only_matrix_autocomplete_and_single_result_events(Only_matrix_Search_resul
 
 class Only_matrix_Resolve_Conflict_situations(Search_results_events):
     #на вход список search_uid выдач с конфликтными ситуациями
-    def __init__(self,from_timestamp,brand_dict,group_dict,founded_several_combinations,all_searches_dict):
+    def __init__(self,from_timestamp,brand_dict,group_dict,founded_several_combinations,all_searches_dict,region_article,goods_classifier):
         self.from_timestamp = from_timestamp
         self.brand_dict = brand_dict
         self.group_dict = group_dict
@@ -362,6 +365,8 @@ class Only_matrix_Resolve_Conflict_situations(Search_results_events):
         self.result_chains = {}
         self.founded_several_combinations = founded_several_combinations
         self.list_of_conflict_search_uids = []
+        self.region_article = region_article
+        self.goods_classifier = goods_classifier
 
     def query_for_search_uids(self,list_of_args):
         if len(list_of_args) == 1:
@@ -563,23 +568,30 @@ class Only_matrix_search_plots_factory(Search_plots_factory):
             #q = search_results.test_query
             search_results.get_data(q)
 
-            with open(r"search_resultst.pickle", "wb") as output_file:
-                 pickle.dump(search_results, output_file)
+            #with open(r"search_resultst.pickle", "wb") as output_file:
+                 #pickle.dump(search_results, output_file)
 
 
             tmpframe = pd.DataFrame.from_dict(search_results.all_searches_dict, orient='index',columns=['Search_uid', 'Search_query', 'brand', 'region', 'group','Search_result'])
             tmpframe.to_csv('out_tmp_' + self.prefix + '.csv', index=False)
             #search_results.types_of_results.to_csv("test_10000.csv", index=False)
             #добавляем однозначные поиски
-            additional_search_results = Only_matrix_autocomplete_and_single_result_events(search_results.brands_dict,search_results.groups_dict,search_results.all_searches_dict)
+            additional_search_results = Only_matrix_autocomplete_and_single_result_events(
+                search_results.brands_dict,
+                search_results.groups_dict,
+                search_results.all_searches_dict,
+                search_results.from_timestamp,
+                search_results.region_article,
+                search_results.goods_classifier
+            )
 
             q = additional_search_results.query_get_autocompletes_and_single_suggest
             additional_search_results.get_data(q)
             tmpframe = pd.DataFrame.from_dict(additional_search_results.all_searches_dict, orient='index',columns=['Search_uid', 'Search_query', 'brand', 'region', 'group','Search_result'])
             tmpframe.to_csv('out_tmp_' + self.prefix + '.csv', index=False)
 
-            with open(r"additional_search_results.pickle", "wb") as output_file:
-                 pickle.dump(search_results, output_file)
+            #with open(r"additional_search_results.pickle", "wb") as output_file:
+                 #pickle.dump(search_results, output_file)
 
             #разрешаем конфликты
             resolver = Only_matrix_Resolve_Conflict_situations(
@@ -587,7 +599,9 @@ class Only_matrix_search_plots_factory(Search_plots_factory):
                 search_results.brands_dict,
                 search_results.groups_dict,
                 search_results.founded_several_combinations,
-                additional_search_results.all_searches_dict
+                additional_search_results.all_searches_dict,
+                search_results.region_article,
+                search_results.goods_classifier
             )
             resolver.resolve_dispatcher(list(search_results.founded_several_combinations.keys()))
             with open(r"resolver.pickle", "wb") as output_file:
