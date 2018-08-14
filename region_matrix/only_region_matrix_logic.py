@@ -623,4 +623,3 @@ class Only_matrix_search_plots_factory(Search_plots_factory):
             #self.main_frame.to_excel(writer, 'Sheet1')
 
             #writer.save()
-            #todo из фрейма фильтровать ьлдбко наши бренды!
