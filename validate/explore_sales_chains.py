@@ -6,10 +6,41 @@ import json
 
 class Sales_db_worker(Base_Elastic):
 
-    def __init__(self,t):
+    def __init__(self,t,list_of_ids):
         self.from_timestamp = t
         self.list_of_sales_ids={}
+        self.list_of_ids = list_of_ids
         #self.list_of_sales_ids2={}
+    def query(self,list_of_args):
+        if len(list_of_args)==1:
+            gt = list_of_args[0]
+        else:
+            gt = list_of_args[0]
+        query = {
+            "bool": {
+                "must": [
+                    {"range": {"timestamp": {"gt": gt, "lt": 1533081600}}},
+
+                    {
+                        "match": {
+                            "event": "checkout"
+                        }
+                    },
+                    {
+                        "match": {
+                            "region": "Новосибирск"
+                        }
+                    },
+                    {
+                        "terms": {
+                            "search_uid": list(self.list_of_ids)
+                        }
+                    }
+                ]
+            }
+        }
+
+        return query
 
     def get_query(self,q,list_of_args=list()):
 
@@ -463,7 +494,7 @@ class Explore_sales_chains():
 #explore.get_sales_events(1530403200)
 
 
-
+'''
 main_frame = pd.read_csv('out.csv')
 f = pd.read_csv('searches.csv')
 finded = 0
@@ -474,6 +505,26 @@ for row in range(0,rows, 1):
         finded +=1
 
 a = 1
+'''
+
+
+#получить список id по новосибу по нужному бренду, сделать запрос на получение продаж по этому списку
+main_frame = pd.read_csv('../searches/out_matrix.csv')
+prefix = "matrix"
+with open('../searches/brand_dict_' + prefix + '.json') as data_file:
+    brand_dict = json.load(data_file)
+with open('../searches/group_dict_' + prefix + '.json') as data_file:
+    group_dict = json.load(data_file)
+with open('../searches/region_dict_' + prefix + '.json') as data_file:
+    region_dict = json.load(data_file)
+
+slice = main_frame.loc[(main_frame["region"]==region_dict["Новосибирск"])&(main_frame["brand"]==brand_dict["Rancho"])&(main_frame["Search_result"]==1)]
+
+sales = Sales_db_worker(1530403200,slice["Search_uid"])
+sales.get_data(sales.query)
+
+a = 1
+
 
 
 

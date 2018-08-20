@@ -17,6 +17,7 @@ import collections
 from validate.validate_searches import Availebness_in_1c
 from  frame_partial_reader.frame_partial_reader import Frame_partial_reader
 import psutil
+import os
 warnings.filterwarnings('ignore')
 
 """
@@ -190,6 +191,12 @@ class Searches_in_input_field_event(Base_Elastic):
     def json_end_file(self):
         return
 
+def memory_usage_psutil():
+    # return the memory usage in MB
+    process = psutil.Process(os.getpid())
+    mem = process.memory_full_info()[12] / float(2 ** 20)
+    return mem
+
 class Search_results_events(Base_Elastic):
 
     def __init__(self):
@@ -213,10 +220,10 @@ class Search_results_events(Base_Elastic):
 
         #self.list_of_search_uids_of_searches_events_ended_with_sales = f["search_uid"].unique()
 
-
+        print(memory_usage_psutil())
         pr = Frame_partial_reader()
         pr.read("parts_with_sg_mg.csv")
-
+        print(memory_usage_psutil())
 
 
         self.goods_classifier = pr.parse_result
@@ -236,9 +243,9 @@ class Search_results_events(Base_Elastic):
         #self.founded_several_combinations2 = 0
 
         #self.not_succsess2 = 0
-        #self.count = 0
-        #self.count2 = 0
-        #self.count3 = 0
+        self.count = 0
+        self.count2 = 0
+        self.count3 = 0
 
         #тсп/не тсп(одна партерра пока видимо)
         #локальный склад/не локальный
@@ -498,7 +505,8 @@ class Search_results_events(Base_Elastic):
 
     def add_to_frame(self,search_uid,search_query,brand_code,region,group_code,result):
         #только если не в конфликтых уже
-        if search_uid not in self.founded_several_combinations:
+        #if search_uid not in self.founded_several_combinations:
+
             self.all_searches_dict[self.row_count] = [
                 search_uid,
                 search_query,
@@ -634,7 +642,7 @@ class Search_sales(Base_Elastic):
                     },
                     {
                         "terms": {
-                            "region": ["Новосибирск", "Санкт-Петербург"]
+                            "region": ["Новосибирск"]
                         }
                     },
 
@@ -1349,7 +1357,7 @@ class Sales_plots_factory(Search_plots_factory):
         #percent3 = (self.frame_searches_with_sales_only.shape[0]*100)/all_chains#% поисков с продажами
 
         labels = 'удачные с продажей', 'удачные без продажи', 'неудачные с продажей','неудачные без продажи','продаж без поисков(с нового сайта) вообще'
-        fracs = [percent1, percent2, percent3,percent4,percent5] #[2548, 8355, 2578, 28793, 61719] [159, 507, 3075, 24178, 71212]
+        fracs = [percent1, percent2, percent3,percent4,percent5] #[2548, 8355, 2578, 28793, 61719] [159, 507, 3075, 24178, 71212]   - самый последний результат - [2505, 7950, 772, 6381, 63256]
         # [5009, 13088, 832, 4769, 111135] - это продажи по матрице региона(НСК и питер)
         plt.pie(fracs, labels=labels, autopct='%1.1f%%', shadow=False)
         plt.title('Виды цепочек действий пользователей')
