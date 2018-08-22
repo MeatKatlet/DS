@@ -7,7 +7,7 @@ import csv
 
 class Frame_partial_reader():
 
-    def __init__(self):
+    def __init__(self,filter=dict):
         self.parse_result = {}
         self.dublicates = 0
         self.dublicates2 = 0
@@ -17,6 +17,8 @@ class Frame_partial_reader():
         self.articles = collections.OrderedDict()
 
         self.nsi_dict = pd.DataFrame(columns=["NSI","Article","Brand", "Group"])
+
+        self.filter = filter
 
     def read4(self, path):
         goods_classifier = pd.read_csv(path, sep=';', names=["NSI", "Brand", "oemnumber", "name", "number", "group"])
@@ -109,13 +111,12 @@ class Frame_partial_reader():
 
         self.nsi_dict = self.nsi_dict.groupby(["NSI", "Brand", "oemnumber", "name", "number", "group"],as_index=False)
 
+
     def read(self, path):  # это для фреймов больше 1000
-            # todo проверитиь уникальность кодов нси
+
             #goods_classifier = pd.read_csv(path, sep=';',names=["NSI", "Brand", "oemnumber", "name", "number", "group"])
             fp = open(path, encoding='utf-8')
-            # n = 0
-            # no_brand_or_group = 0
-            # parse_result = {}
+
             """
                     parse_result[0][NSI 1] = id1 - номер соответствующего сочетания бренд/группа для этого NSI
                     parse_result[0][NSI 2] = id2
@@ -131,18 +132,28 @@ class Frame_partial_reader():
                 if line[:3] == 'NSI':  # если первая позиция в строуке NSI то предыдущая строка закончилась
 
                     # splitted = prev_line.split(";")
-                    if (prev_line.count('"') % 2) != 0:
-                        prev_line = prev_line.replace(r'"', "")
-
+                    #if (prev_line.count('"') % 2) != 0:
+                    #    prev_line = prev_line.replace(r'"', "")
+                    if prev_line=="":
+                        prev_line = line
+                        continue
                     splitted = list(csv.reader([prev_line], delimiter=';'))
                     # n += 1
-                    nsi = splitted[0][0]
-                    oemnumber = splitted[0][2]
+                    nsi = splitted[0][0]#фильтровать!
+                    oemnumber = splitted[0][2]#фильтровать!
                     brand = splitted[0][1]
-                    group = splitted[0][5]
+                    group = splitted[0][3]
+
+
+
+                    if oemnumber not in self.filter:#todo очистить заранее все артикулы!
+                        prev_line = line
+                        continue
+
 
                     if brand != brand or group != group:  # проверка на Nan
                         self.no_brand_or_group += 1
+                        prev_line = line
                         continue
 
                     # hex = str(hash(brand + group))

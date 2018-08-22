@@ -6,29 +6,38 @@ import pandas as pd
 import math
 import psutil
 import os
+import csv
 import pickle
+from region_matrix.Filter_fabric import Filter_fabric
 
+def memory_usage_psutil():
+    # return the memory usage in MB
+    process = psutil.Process(os.getpid())
+    mem = process.memory_full_info()[12] / float(2 ** 20)
+    return mem
 class Only_matrix_Search_results_events(Search_results_events):
     #nsi_not_in_matrix = False
 
-    def add_matrix_dictionary_to_class(self):
+    def add_matrix_dictionary_to_class(self, filter=dict):
 
         self.region_article ={}
-        self.region_article["Новосибирск"] = {}
-        self.region_article["Санкт-Петербург"] = {}
+        #self.region_article["Новосибирск"] = {}
+        #self.region_article["Санкт-Петербург"] = {}
         self.region_nsi ={}
-        self.region_nsi["Новосибирск"] ={}
-        self.region_nsi["Санкт-Петербург"] ={}
+        """
+        #self.region_nsi["Новосибирск"] ={}
+        #self.region_nsi["Санкт-Петербург"] ={}
         #names=["Nom_Name","Nom_Code","Artikul","SKlad_Code","SKlad_Name","CFO_Code","CFO_Name","NomGr","MarkGr","SinMarkGr","Brand"]
         #matrix =
-        self.matrix = pd.read_csv("matrixNom.csv", sep=';')
+        matrix = pd.read_csv("matrixNom.csv", sep=';')
         #matrix = matrix[matrix["CFO_Name"]=="Новосибирск",matrix["CFO_Name"]=="Санкт-Петербург"]
         #array = ["Новосибирск", "Санкт-Петербург"]
+
         array = ["Новосибирск"]
         #self.matrix = matrix.loc[matrix["CFO_Name"].isin(array)]
-        rows = self.matrix.shape[0]
+        rows = matrix.shape[0]
         for row in range(0,rows,1):
-            line = self.matrix.iloc[row]
+            line = matrix.iloc[row]
             if line[6] not in self.region_article:
                 self.region_article[line[6]] = {}
                 self.region_article[line[6]][line[2]] = 1
@@ -37,6 +46,53 @@ class Only_matrix_Search_results_events(Search_results_events):
             else:
                 self.region_article[line[6]][line[2]] = 1
                 self.region_nsi[line[6]][line[1]] = 1
+
+
+        del matrix
+        a=1
+        print(memory_usage_psutil())
+        """
+        path = "region_matrix_pure.csv"
+
+
+        #todo проход по файлу ! - подготовить файл - убрать все имена! - первая колонка
+        fp = open(path, encoding='utf-8')
+
+        prev_line = ''
+        for i, line in enumerate(fp):
+
+            if line[:3] == 'NSI':
+
+                if prev_line == "":
+                    prev_line = line
+                    continue
+                splitted  = list(csv.reader([prev_line],delimiter=';'))
+                nsi = splitted[0][0]  # фильтровать!
+                article = splitted[0][1]  # фильтровать!
+
+                region = splitted[0][2]
+
+                if region not in filter["regions"] or article not in filter["articules"] or nsi not in filter["nsi"]:
+                    prev_line = line
+                    continue
+
+                if region not in self.region_article:
+                    self.region_article[region] = {}
+                    self.region_article[region][article] = 1
+                    self.region_nsi[region] = {}
+                    self.region_nsi[region][nsi] = 1
+                else:
+                    self.region_article[region][article] = 1
+                    self.region_nsi[region][nsi] = 1
+
+
+                prev_line = line
+            else:
+                prev_line = prev_line + line
+                prev_line = ""
+                continue
+
+        fp.close()
 
 
 
@@ -625,9 +681,14 @@ class Only_matrix_search_plots_factory(Search_plots_factory):
 
         if from_db:
             print(memory_usage_psutil())
-            search_results = Only_matrix_Search_results_events()# searches_input_field.list_of_search_uids передавать когда понадобится фильтрация по мобытию вставки номера детали в строку поиска
+            #todo сделать файл справочника - убрать имена!
+            filter_fabric = Filter_fabric(1532084400)
+
+            filter_fabric.get_only_used_data_from_dictionaries()
             print(memory_usage_psutil())
-            search_results.add_matrix_dictionary_to_class()
+            search_results = Only_matrix_Search_results_events(filter=filter_fabric.filter["articules"])# searches_input_field.list_of_search_uids передавать когда понадобится фильтрация по мобытию вставки номера детали в строку поиска
+            print(memory_usage_psutil())
+            search_results.add_matrix_dictionary_to_class(filter=filter_fabric.filter)
             print(memory_usage_psutil())
             exit(1)
             q = search_results.query_make3

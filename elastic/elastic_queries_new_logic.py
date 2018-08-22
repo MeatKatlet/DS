@@ -199,7 +199,7 @@ def memory_usage_psutil():
 
 class Search_results_events(Base_Elastic):
 
-    def __init__(self):
+    def __init__(self,filter=dict):
         self.from_timestamp = 1530403200
         #self.list_of_search_uids = list_of_search_uids
 
@@ -221,8 +221,8 @@ class Search_results_events(Base_Elastic):
         #self.list_of_search_uids_of_searches_events_ended_with_sales = f["search_uid"].unique()
 
         print(memory_usage_psutil())
-        pr = Frame_partial_reader()
-        pr.read("parts_with_sg_mg.csv")
+        pr = Frame_partial_reader(filter)
+        pr.read("nsi_goods_classifier_pure.csv")#parts_with_sg_mg.csv
         print(memory_usage_psutil())
 
 
@@ -232,6 +232,7 @@ class Search_results_events(Base_Elastic):
         self.brands_dict = pr.brands
         self.groups_dict = pr.groups
         #self.articles_dict = pr.articles
+        del pr
 
         self.regions_dict = collections.OrderedDict()
 
@@ -317,11 +318,7 @@ class Search_results_events(Base_Elastic):
         for i in range(0, length, 1):
 
             hit = list_of_elements[i]["_source"]
-            #timestamp = hit["timestamp"]
-            #if len(self.all_searches) > 100000:#если памяти меньше 100 мб то дамп делаем фрейма и обнуляем его!
-                #self.all_searches.to_csv("dump_"+str(self.dump)+".csv", index=False)
-                #self.dump += 1
-                #self.all_searches = pd.DataFrame(columns=['Search_uid', 'Search_query', 'brand', 'region', 'group', 'Search_result'])
+
 
             if "search_query" not in hit:
                 continue
@@ -329,14 +326,7 @@ class Search_results_events(Base_Elastic):
             search_uid = hit["search_uid"]
             #page = hit["page_number"]
 
-            #have_region = 0
-            #results_groups = 0
-            #search_results = 0
-            #availably = 0
-            #brand_group_have_names = 0
-            #query_dictionary_brand_group_overlap = 0
-            #local_store = 0
-            #tcp = 0
+
             succsess_searches_count = 0  # не ТСП
 
             #brand_from_query = self.get_from_query(search_query)
@@ -345,31 +335,27 @@ class Search_results_events(Base_Elastic):
 
             if "region" in hit:
                 region = hit["region"]
-                #have_region += 1
+
 
                 if region not in self.regions_dict:
                    self.regions_dict[region] = len(self.regions_dict)
 
                 length2 = len(hit["results_groups"])
-                #if length2 == 0:
-                    #results_groups += 1
+
 
                 #надо узнать статистику случаев когда больше двух брендов в результате выдачи
                 #надо записывать бренды
                 succsess_searches_count = 0
-                #succsess_searches_count2 = 0
-                #brands = list()
-                #market_groups = list()
+
                 brand_group_variants = {}
-                #df = pd.DataFrame(columns=["brand","group"])
+
                 empty_result = True
 
                 for k in range(0, length2, 1):#по всем элементам results_groups, в каждом элементе один атрибут search_results
                     results_group_item = hit["results_groups"][k]
 
                     length3 = len(results_group_item["search_results"])
-                    #if length3==0:
-                        #search_results += 1
+
 
                     for j in range(0, length3, 1):
                         element_of_search_results = results_group_item["search_results"][j]
