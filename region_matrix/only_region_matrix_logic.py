@@ -680,17 +680,17 @@ class Only_matrix_search_plots_factory(Search_plots_factory):
 
 
         if from_db:
-            print(memory_usage_psutil())
+
             #todo сделать файл справочника - убрать имена!
             filter_fabric = Filter_fabric(1532084400)
 
             filter_fabric.get_only_used_data_from_dictionaries()
-            print(memory_usage_psutil())
+
             search_results = Only_matrix_Search_results_events(filter=filter_fabric.filter["articules"])# searches_input_field.list_of_search_uids передавать когда понадобится фильтрация по мобытию вставки номера детали в строку поиска
-            print(memory_usage_psutil())
+
             search_results.add_matrix_dictionary_to_class(filter=filter_fabric.filter)
-            print(memory_usage_psutil())
-            exit(1)
+
+
             q = search_results.query_make3
             #q = search_results.test_query
             search_results.get_data(q)
