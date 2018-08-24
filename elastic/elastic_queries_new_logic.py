@@ -1259,13 +1259,7 @@ class Sales_plots_factory(Search_plots_factory):
             sales.sales = sales.sales.groupby(["Search_uid_sales"], as_index=False)["Sale"].agg("count")#todo заменить везде где больше 1 на 1 группируем по id поскольку один товар - это одно оформление заказа в эластике - одно событие(но в корзине может быть несколько товаров)
             sales.sales.loc[sales.sales['Sale'] > 0, 'Sale'] = 1
             sales.sales_without_searches.loc[sales.sales_without_searches['Sale'] > 0, 'Sale'] = 1
-            """
-                #проверить на уникальность все значения индекса!
-            l1 = len(df['Search_uid'].unique())
-            l2 = len(sales.sales['Search_uid'].unique())
-            if l1 != df.shape[0] or l2 != sales.sales.shape[0]:
-                exit(1)
-            """
+
             # удачные с продажей
             # удачные без продажи
             # неудачные с продажей
@@ -1273,8 +1267,8 @@ class Sales_plots_factory(Search_plots_factory):
             self.main_frame.isnull().any().any()
             #self.main_frame.set_index('Search_uid')
             #sales.sales.set_index('Search_uid')
-            #todo есть неуникальные Search_uid и Search_uid_sales, и продаж без поисков у нас 38000(вне диапазона id) а с поисками 23000
-            #todo надо что-то делать с дубликатами - это могут быть поиски по пагинации - вторые и третьи страницы
+
+
             #self.frame_all_searches_with_sales = pd.concat([self.main_frame, sales.sales], axis=1, sort=False)#и удачные и неудачные для самопроверки!
             self.frame_all_searches_with_sales =  self.main_frame.merge(sales.sales, how='left', left_on='Search_uid', right_on='Search_uid_sales')
             self.frame_all_searches_with_sales.fillna(0, inplace=True)#в файл
@@ -1308,6 +1302,8 @@ class Sales_plots_factory(Search_plots_factory):
         self.region_dict = search_plots_factory.region_dict
         self.brand_dict = search_plots_factory.brand_dict
         self.group_dict = search_plots_factory.group_dict
+
+
 
 
 
