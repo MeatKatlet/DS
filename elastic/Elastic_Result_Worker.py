@@ -2,18 +2,23 @@ import requests
 import json
 import pandas as pd
 from time import gmtime, strftime
+import time
+from datetime import datetime
 
 class Elastic_Result_Worker():
 
-    def __init__(self,url):
-        self.elastic_adress = url
+    def __init__(self,search_plots_factory,curent_interval_timestamp):
+        self.elastic_adress = "http://bielastic.rossko.local:9200/"
+        self.elastic_index = "prod_i_m-"
         self.searches_statistics = pd.DataFrame()
+        self.curent_interval_timestamp = curent_interval_timestamp
+
+        self.region_dict = list(search_plots_factory.region_dict)
+        self.brand_dict = list(search_plots_factory.brand_dict)
+        self.group_dict = list(search_plots_factory.group_dict)
+
 
     def get_elastic_data_presentation(self,input_frame):
-        #Search_uid,Search_query,region,brand,group,Search_result,Search_uid_sales,Sale
-        # todo создать фрейм в котором будут сгруппированы строки по городу/бренду группе / будет колонка всег опоисков/ удачных поисков и колонка споисками закончеными продажей
-        #tmp = input_frame.groupby(['region','brand','group'], as_index=False)['Search_result'].agg('count')# количество поисков всего в каждой группе
-        #input_frame[input_frame["Search_result"]==1].groupby(['region','brand','group'], as_index=False)[]
 
         total_searches = input_frame.groupby(['region', 'brand', 'group'])['Search_result'].agg('count').to_frame()#сколько всего поисков
         sucsess_searches = input_frame[input_frame["Search_result"] == 1].groupby(['region', 'brand', 'group'])['Search_result'].agg('count').to_frame()#сколько всего удачных поисков
@@ -26,18 +31,11 @@ class Elastic_Result_Worker():
         self.searches_statistics.columns = ["Total_searches", "Sucsess_searches", "Sales_from_sucsess_searches"]
         self.searches_statistics.reset_index(inplace=True)
 
-        #input_frame["Search_result"][input_frame["Search_result"]==1] = "Удачный"
-        #input_frame["Search_result"][input_frame["Search_result"]==0] = "НеУдачный"
-        #input_frame["Sale"][input_frame["Sale"]==1] = "Продажа"
-        #input_frame["Sale"][input_frame["Sale"]==0] = "НетПродажы"
-
-        #df2 = input_frame.groupby(['region','brand','group', 'Search_result','Sale']).size().reset_index(name='count')
-
-        #df3 = input_frame.groupby(['region','brand','group', 'Search_result','Sale']).size().unstack(fill_value=0)
-        self.walk_by_result_frame()
 
 
-    def walk_by_result_frame(self):
+
+
+    def walk_by_result_frame(self,i):
         #a = 1
         region_brand = self.searches_statistics.groupby(['region', 'brand'], as_index=False).agg('sum')
 
@@ -45,31 +43,77 @@ class Elastic_Result_Worker():
         # todo можно создать агрегат по региону-бренду, региону-товарной группе
         rows = region_brand.shape[0]
         # todo sort by region!
-
+        region_brand.sort_values(by=['region'])
         prev_region = ""
         doc = {}
-        i = 0
+        i = i
         for row in range(0, rows, 1):
             line = region_brand.iloc[row]
 
-            region = line[0]  # todo по справочнику получить имя региона!
-            brand = line[1]  # todo по справочнику получить имя группы!
-            total = line[3]
-            sucsess = line[4]
-            sold = line[5]
+            region = self.region_dict[int(line["region"])]
+            brand = self.brand_dict[int(line["brand"])]
+            total = int(line["Total_searches"])
+            sucsess = int(line["Sucsess_searches"])
+            sold = int(line["Sales_from_sucsess_searches"])
 
-            if prev_region != region:
-                self.insert_document_to_elastic(json.dumps(doc), i)
-                doc = {}
-                doc["region"] = region
-                doc["brands"] = []
-                i += 1
-                prev_region = region
+            #if prev_region != region:
+            doc = {}
+
+            doc["@region"] = region
+            doc["brand"] = brand
+            doc["group"] = "-"
+            doc["total_searches"] = total
+            doc["sucsess_searches"] = sucsess
+            doc["solded_searches"] = sold
+
+
+            self.insert_document_to_elastic(doc, i)
+
+            i += 1
+
+            #doc = {}
+            #doc["region"] = region
+            ##doc["brands"] = []
+            #i += 1
+            #prev_region = region
+
 
             # todo сделать его в один документ! регион-бренд - 3 числа, протестировать потом nested документы и будет ли виден атрибут регион в родительском контейнере?
-            doc["brands"].append({"brand_name": brand, "total": total, "sucsess": sucsess, "sold": sold})
+            #doc["brands"].append({"brand_name": brand, "total": total, "sucsess": sucsess, "sold": sold})
 
-        # todo тоже самое проделать с группами!
+
+        region_group = self.searches_statistics.groupby(['region', 'group'], as_index=False).agg('sum')
+        region_group.sort_values(by=['region'])
+
+
+
+        rows = region_group.shape[0]
+        doc = {}
+        i = i
+        for row in range(0, rows, 1):
+            line = region_group.iloc[row]
+
+            region = self.region_dict[int(line["region"])]
+            group = self.group_dict[int(line["group"])]
+            total = int(line["Total_searches"])
+            sucsess = int(line["Sucsess_searches"])
+            sold = int(line["Sales_from_sucsess_searches"])
+
+            # if prev_region != region:
+            doc = {}
+
+            doc["@region"] = region
+            doc["brand"] = "-"
+            doc["group"] = group
+            doc["total_searches"] = total
+            doc["sucsess_searches"] = sucsess
+            doc["solded_searches"] = sold
+
+            self.insert_document_to_elastic(doc, i)
+            i += 1
+
+        return i
+
     """
      def generate_bulk_insert_string(self,document_to_insert):
         doc_string = json.dumps(document_to_insert)
@@ -105,13 +149,16 @@ class Elastic_Result_Worker():
     """
 
 
-    def insert_document_to_elastic(self, query_string, id):
-        current_day = strftime("%Y.%m.%d", gmtime())
+    def insert_document_to_elastic(self, doc, id):
+        doc["@timestamp"] = self.curent_interval_timestamp
+        query_string = json.dumps(doc)
+        #current_day = "2018.08.18" strftime("%Y.%m.%d", gmtime())
+        current_day = datetime.utcfromtimestamp(int(self.curent_interval_timestamp)/1000).strftime('%Y.%m.%d')
+
 
         headers = {'Accept': 'application/json', 'Content-type': 'application/json'}
-        # elastic_url = 'http://roesportal.rossko.local:80/' + self.index + '-*/_search/?size=' + str(size) + '&pretty'
-        # elastic_url = 'http://elasticsearch.rossko.local:9200/' + self.index + '-*/_search/?size=' + str(size) + '&pretty'
-        elastic_url = "http://elasticsearch.rossko.local:9200/inventory_management-" + current_day + "/doc/"+str(id)
+
+        elastic_url = self.elastic_adress+self.elastic_index + current_day + "/doc/"+str(id)
 
 
         while True:
@@ -123,11 +170,3 @@ class Elastic_Result_Worker():
 
                 break
 
-
-
-
-
-frame_all_searches_with_sales = pd.read_csv("../searches/frame_all_searches_with_sales_matrix.csv")
-
-w = Elastic_Result_Worker("")
-w.get_elastic_data_presentation(frame_all_searches_with_sales)

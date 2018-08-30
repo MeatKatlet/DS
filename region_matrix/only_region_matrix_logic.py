@@ -106,7 +106,7 @@ class Only_matrix_Search_results_events(Search_results_events):
         query = {
             "bool": {
                 "must": [
-                    {"range": {"timestamp": {"gt": gt, "lt": 1533081600}}},
+                    {"range": {"timestamp": {"gt": gt, "lt": self.to_timestamp}}},
 
                     {
                         "match": {
@@ -127,7 +127,7 @@ class Only_matrix_Search_results_events(Search_results_events):
                     },
                     {
                         "terms": {
-                            "region": ["Новосибирск"]
+                            "region": list(self.region_article.keys())
                         }
                     }
                 ]
@@ -362,6 +362,8 @@ class Only_matrix_autocomplete_and_single_result_events(Only_matrix_Search_resul
         self.groups_dict = groups_dict
         self.all_searches_dict = all_searches_dict
         self.from_timestamp = from_timestamp
+        self.to_timestamp = self.from_timestamp + 300  # 5 минут
+
         self.region_article = region_article
         self.goods_classifier = goods_classifier
         self.regions_dict = regions_dict
@@ -376,7 +378,7 @@ class Only_matrix_autocomplete_and_single_result_events(Only_matrix_Search_resul
         query = {
             "bool": {
                 "must": [
-                    {"range": {"timestamp": {"gt": gt, "lt": 1533081600}}},
+                    {"range": {"timestamp": {"gt": gt, "lt": self.to_timestamp}}},
 
                     {
                         "match": {
@@ -395,7 +397,7 @@ class Only_matrix_autocomplete_and_single_result_events(Only_matrix_Search_resul
                     },
                     {
                         "terms": {
-                            "region": ["Новосибирск"]
+                            "region": list(self.region_article.keys())
                         }
                     }
                 ]
@@ -439,6 +441,7 @@ class Only_matrix_Resolve_Conflict_situations(Search_results_events):
     #на вход список search_uid выдач с конфликтными ситуациями
     def __init__(self,from_timestamp,brand_dict,group_dict,founded_several_combinations,all_searches_dict,region_article,goods_classifier,regions_dict,row_count):
         self.from_timestamp = from_timestamp
+        self.to_timestamp = self.from_timestamp + 300  # 5 минут
         self.brand_dict = brand_dict
         self.group_dict = group_dict
         self.all_searches_dict = all_searches_dict
@@ -459,7 +462,7 @@ class Only_matrix_Resolve_Conflict_situations(Search_results_events):
         query = {
             "bool": {
                 "must": [
-                    {"range": {"timestamp": {"gt": gt, "lt": 1533081600}}},
+                    {"range": {"timestamp": {"gt": gt, "lt": self.to_timestamp}}},
 
                     {
                         "match": {
@@ -473,7 +476,7 @@ class Only_matrix_Resolve_Conflict_situations(Search_results_events):
                     },
                     {
                         "terms": {
-                            "region": ["Новосибирск"]
+                            "region": list(self.region_article.keys())
                         }
                     }
                 ]
@@ -675,18 +678,21 @@ def memory_usage_psutil():
 
 class Only_matrix_search_plots_factory(Search_plots_factory):
     prefix = "matrix"
-
-    def get_main_dataframe(self, from_db=True):#получает главный фрейм из бд или файла и сохраняет его в атрибут класса, для дальнейшего доступа к нему откуда угодно
+    filter_regions = []
+    def get_main_dataframe(self, start=0,from_db=True):#получает главный фрейм из бд или файла и сохраняет его в атрибут класса, для дальнейшего доступа к нему откуда угодно
 
 
         if from_db:
 
             #todo сделать файл справочника - убрать имена!
-            filter_fabric = Filter_fabric(1532084400)
-
+            filter_fabric = Filter_fabric(start)
+            #todo могут быть пустые значения т.к. не было данных!
             filter_fabric.get_only_used_data_from_dictionaries()
 
-            search_results = Only_matrix_Search_results_events(filter=filter_fabric.filter["articules"])# searches_input_field.list_of_search_uids передавать когда понадобится фильтрация по мобытию вставки номера детали в строку поиска
+            if len(filter_fabric.filter["articules"])==0:
+                return False
+
+            search_results = Only_matrix_Search_results_events(start=start, filter=filter_fabric.filter["articules"])# searches_input_field.list_of_search_uids передавать когда понадобится фильтрация по мобытию вставки номера детали в строку поиска
 
             search_results.add_matrix_dictionary_to_class(filter=filter_fabric.filter)
 
@@ -700,7 +706,7 @@ class Only_matrix_search_plots_factory(Search_plots_factory):
 
 
             tmpframe = pd.DataFrame.from_dict(search_results.all_searches_dict, orient='index',columns=['Search_uid', 'Search_query', 'brand', 'region', 'group','Search_result'])
-            tmpframe.to_csv('out_tmp_' + self.prefix + '.csv', index=False)
+            #tmpframe.to_csv('out_tmp_' + self.prefix + '.csv', index=False)
             #search_results.types_of_results.to_csv("test_10000.csv", index=False)
             #добавляем однозначные поиски
             additional_search_results = Only_matrix_autocomplete_and_single_result_events(
@@ -717,7 +723,7 @@ class Only_matrix_search_plots_factory(Search_plots_factory):
             q = additional_search_results.query_get_autocompletes_and_single_suggest
             additional_search_results.get_data(q)
             tmpframe = pd.DataFrame.from_dict(additional_search_results.all_searches_dict, orient='index',columns=['Search_uid', 'Search_query', 'brand', 'region', 'group','Search_result'])
-            tmpframe.to_csv('out_tmp_' + self.prefix + '.csv', index=False)
+            #tmpframe.to_csv('out_tmp_' + self.prefix + '.csv', index=False)
 
             #with open(r"additional_search_results.pickle", "wb") as output_file:
                  #pickle.dump(search_results, output_file)
@@ -748,7 +754,7 @@ class Only_matrix_search_plots_factory(Search_plots_factory):
             self.region_dict = search_results.regions_dict
             search_results.goods_classifier = {}
             #self.goods_classifier = search_results.goods_classifier
-
+            self.filter_regions = list(search_results.region_article.keys())
             #self.founded_several_combinations = search_results.founded_several_combinations
             #self.not_succsess_searches = search_results.not_succsess
 
@@ -758,12 +764,12 @@ class Only_matrix_search_plots_factory(Search_plots_factory):
 
             #self.draw_statistics(search_results)
             self.collapse_rows_from_one_pagination_chain()
-            #before_frame.to_csv('out2.csv', index=False)
-            #self.test_frame(before_frame)
 
-            self.main_frame.to_csv('out_'+self.prefix+ '.csv', index=False)
+
+            #self.main_frame.to_csv('out_'+self.prefix+ '.csv', index=False)
             self.first_timestamp_from_query = search_results.first_timestamp_from_query
 
+            """
             with open('special_'+self.prefix+ '.json', 'w') as fp:
                 json.dump(self.first_timestamp_from_query, fp)
             with open('brand_dict_'+self.prefix+ '.json', 'w') as fp:
@@ -772,6 +778,8 @@ class Only_matrix_search_plots_factory(Search_plots_factory):
                 json.dump(self.group_dict, fp)
             with open('region_dict_'+self.prefix+ '.json', 'w') as fp:
                 json.dump(self.region_dict, fp)
+            """
+
 
         else:
             #special = pd.read_csv('special.csv')
@@ -807,3 +815,4 @@ class Only_matrix_search_plots_factory(Search_plots_factory):
             #self.main_frame.to_excel(writer, 'Sheet1')
 
             #writer.save()
+        return True

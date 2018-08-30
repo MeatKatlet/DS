@@ -102,7 +102,7 @@ class Base_Elastic():
 
 
 
-        self.json_begin_file()
+        #self.json_begin_file()
 
         while True:
 
@@ -142,14 +142,17 @@ class Base_Elastic():
                 break
 
 
-        self.json_end_file()
+        #self.json_end_file()
 
     def do_logic_short(self, list_of_elements):
-        self.f.write("[")
-        self.save_json_to_file(list_of_elements)
-        self.f.write("{}")
-        self.f.write("]")
-        self.f.close()
+        #self.f.write("[")
+        #self.save_json_to_file(list_of_elements)
+        #self.f.write("{}")
+        #self.f.write("]")
+        #self.f.close()
+        return
+
+
 
     def do_logic(self, list_of_elements):
 
@@ -199,8 +202,9 @@ def memory_usage_psutil():
 
 class Search_results_events(Base_Elastic):
 
-    def __init__(self,filter=dict):
-        self.from_timestamp = 1530403200
+    def __init__(self,start=0,filter=dict):
+        self.from_timestamp = start
+        self.to_timestamp = self.from_timestamp + 300  # 5 минут
         #self.list_of_search_uids = list_of_search_uids
 
         # создаем df в котором будут в каждой строке инфа по поиску запчасти, колонки искомый артикул?, результат поиска(1/0, удачный/неудачный), бренд, регион, товарная группа,
@@ -588,16 +592,19 @@ class Search_results_events(Base_Elastic):
 
 class Search_sales(Base_Elastic):
 
-    def __init__(self,search_uids_list,from_timestamp):
+    def __init__(self,filter_regions,search_uids_list,from_timestamp):
 
         length = search_uids_list.shape[0]
         self.search_uids_list = dict(zip(list(search_uids_list), [i for i in range(0, length)]))
 
         self.from_timestamp = from_timestamp
+        self.to_timestamp = self.from_timestamp + 300  # 5 минут
 
         self.sales = pd.DataFrame(columns=['Search_uid_sales','Timestamp_of_sale','Sale'])
 
         self.sales_without_searches = pd.DataFrame(columns=['Search_uid','Timestamp_of_sale','Sale'])
+
+        self.filtered_regions = filter_regions
 
     def get_query(self,q,list_of_args=list()):
 
@@ -609,10 +616,10 @@ class Search_sales(Base_Elastic):
     def query_make4(self,list_of_args):
         if len(list_of_args) == 1:
             gt = list_of_args[0]  # базовый timestamp будет добавлять
-            range = {"timestamp": {"gt": gt, "lt": 1533081600}}
+            range = {"timestamp": {"gt": gt, "lt": self.to_timestamp}}
         else:
             gt = list_of_args[0]  # это будет когда уже в цикле идет запрос
-            range = {"timestamp": {"gt": gt, "lt": 1533081600}}
+            range = {"timestamp": {"gt": gt, "lt": self.to_timestamp}}
 
         query = {
             "bool": {
@@ -628,9 +635,9 @@ class Search_sales(Base_Elastic):
                     },
                     {
                         "terms": {
-                            "region": ["Новосибирск"]
+                            "region": self.filtered_regions
                         }
-                    },
+                    }
 
                 ]
             }
@@ -1234,7 +1241,7 @@ class Search_plots_factory():
 
 class Sales_plots_factory(Search_plots_factory):
 
-    def __init__(self,search_plots_factory,from_db):
+    def __init__(self,filter_regions,start,search_plots_factory,from_db):
         self.prefix = search_plots_factory.prefix
         # сначала отфильтровать поиски завершившиеся продажей Sales==1,
         self.main_frame = search_plots_factory.main_frame
@@ -1244,12 +1251,12 @@ class Sales_plots_factory(Search_plots_factory):
         if from_db:
             # делаем запрос на продажи
             df = self.main_frame
-            sales = Search_sales(df["Search_uid"], 1530403200)#1530403200 self.first_timestamp_from_query ранний timestamp записали todo когда из файла извлечено то лишняя колонка?
+            sales = Search_sales(filter_regions,df["Search_uid"], start)#1530403200 self.first_timestamp_from_query ранний timestamp записали todo когда из файла извлечено то лишняя колонка?
             q = sales.query_make4
             sales.get_data(q,size=500)
 
             #sales.sales_without_searches.to_csv("sales_without_searches2_"+self.prefix+ ".csv", index=False)
-            sales.sales.to_csv("sales2_"+self.prefix+ ".csv", index=False)
+            #sales.sales.to_csv("sales2_"+self.prefix+ ".csv", index=False)
 
             #sales.sales_without_searches = pd.read_csv("sales_without_searches2.csv")
             #sales.sales = pd.read_csv("sales2.csv")
@@ -1272,7 +1279,7 @@ class Sales_plots_factory(Search_plots_factory):
             #self.frame_all_searches_with_sales = pd.concat([self.main_frame, sales.sales], axis=1, sort=False)#и удачные и неудачные для самопроверки!
             self.frame_all_searches_with_sales =  self.main_frame.merge(sales.sales, how='left', left_on='Search_uid', right_on='Search_uid_sales')
             self.frame_all_searches_with_sales.fillna(0, inplace=True)#в файл
-            self.frame_all_searches_with_sales.to_csv("frame_all_searches_with_sales_"+self.prefix+ ".csv",index=False)#frame_all_searches_with_sales.csv
+            #self.frame_all_searches_with_sales.to_csv("frame_all_searches_with_sales_"+self.prefix+ ".csv",index=False)#frame_all_searches_with_sales.csv
 
             self.sales_without_searches = sales.sales_without_searches#продажи вне диапазона id поисков, у них цепочки не начались с поисков!
             #self.sales_without_searches.to_csv("sales_without_searches_"+self.prefix+ ".csv",index=False)
@@ -1283,13 +1290,13 @@ class Sales_plots_factory(Search_plots_factory):
 
 
         # удачные с продажей
-        self.frame_sucsess_searches_with_sales = self.frame_all_searches_with_sales.query("Search_result == 1 & Sale == 1")#чтобы это здесь было нужно чтобы в файле уже было проведено объединение
+        #self.frame_sucsess_searches_with_sales = self.frame_all_searches_with_sales.query("Search_result == 1 & Sale == 1")#чтобы это здесь было нужно чтобы в файле уже было проведено объединение
         # удачные без продажи
-        self.frame_sucsess_searches_without_sales = self.frame_all_searches_with_sales.query("Search_result == 1 & Sale == 0")
+        #self.frame_sucsess_searches_without_sales = self.frame_all_searches_with_sales.query("Search_result == 1 & Sale == 0")
         # неудачные с продажей
-        self.frame_not_sucsess_searches_with_sales = self.frame_all_searches_with_sales.query("Search_result == 0 & Sale == 1")
+        #self.frame_not_sucsess_searches_with_sales = self.frame_all_searches_with_sales.query("Search_result == 0 & Sale == 1")
         # неудачные без продажи
-        self.frame_not_sucsess_searches_without_sales = self.frame_all_searches_with_sales.query("Search_result == 0 & Sale == 0")
+        #self.frame_not_sucsess_searches_without_sales = self.frame_all_searches_with_sales.query("Search_result == 0 & Sale == 0")
 
 
 
