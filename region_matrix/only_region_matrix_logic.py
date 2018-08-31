@@ -749,6 +749,7 @@ class Only_matrix_search_plots_factory(Search_plots_factory):
             self.main_frame = pd.DataFrame.from_dict(resolver.all_searches_dict, orient='index',columns=['Search_uid','Search_query', 'brand', 'region', 'group', 'Search_result'])
             search_results.all_searches_dict = {}
             #self.main_frame = search_results.all_searches
+            #todo справочники должны быть едиными! независимо от того за какой момент времени делается выборка?
             self.brand_dict = search_results.brands_dict
             self.group_dict = search_results.groups_dict
             self.region_dict = search_results.regions_dict

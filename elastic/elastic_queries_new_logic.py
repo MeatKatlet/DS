@@ -43,26 +43,63 @@ class Base_Elastic():
     first_timestamp_from_query = 0
     timestamp_for_query = 'timestamp'
     index = 'cart_item_event'
+    data_elastic_url = 'http://roesportal.rossko.local:80/'
+    mode = "simple"
+
     def __init__(self):
         self.df = pd.DataFrame()
         # self.query = ""
         self.f = open('result.json', 'a')
 
 
+
     def get_query(self,q,list_of_args=list()):
         query = q(list_of_args)
         return query
 
-    def get_data(self, q,size=100):
-        #query = q()
+    def get_aggs(self):
+        return {}
+
+
+    def get_aggregated_data(self,q,size=0):
         query = self.get_query(q)
         body = {
             "size": size,
             "query": query,
-            "sort": [{self.timestamp_for_query: {"order": "asc"}}]}
+            "aggs": self.get_aggs()
+
+        }
 
         headers = {'Accept': 'application/json', 'Content-type': 'application/json'}
-        elastic_url = 'http://roesportal.rossko.local:80/' + self.index + '-*/_search/?size='+str(size)+'&pretty'
+        elastic_url = self.data_elastic_url + self.index + '-*/_search/?size=' + str(size) + '&pretty'
+        query = json.dumps(body)
+
+        while True:
+            response = requests.post(elastic_url, data=query, verify=False, headers=headers)
+            if (response.status_code == 502):  # , response.text.find("502 Bad Gateway") > 0
+                print("Bad Gateway... REPEAT")
+                continue
+            else:
+
+                break
+        deserilised = json.loads(response.text)
+
+        self.do_logic(deserilised["aggregations"])
+
+
+    def get_data(self, q,size=100):
+        #query = q()
+        query = self.get_query(q)
+
+        body = {
+            "size": size,
+            "query": query,
+            "sort": [{self.timestamp_for_query: {"order": "asc"}}]
+
+        }
+
+        headers = {'Accept': 'application/json', 'Content-type': 'application/json'}
+        elastic_url = self.data_elastic_url + self.index + '-*/_search/?size='+str(size)+'&pretty'
         query = json.dumps(body)
 
 
@@ -112,7 +149,9 @@ class Base_Elastic():
             body = {
                 "size": size,
                 "query": query,
-                "sort": [{self.timestamp_for_query: {"order": "asc"}}]}
+                "sort": [{self.timestamp_for_query: {"order": "asc"}}]
+
+            }
 
             query = json.dumps(body)
 
