@@ -8,6 +8,7 @@ from dashboard.app_logic.Data_manipulator import Data_manipulator
 import json
 import time
 import datetime
+import plotly.graph_objs as go
 
 from dash.dependencies import Input, Output
 
@@ -109,13 +110,8 @@ def render_content(tab):
 
                 html.Div([
                     dcc.Graph(
-                        id='example-graph',
-                        figure={
-                            'data': [],
-                            'layout': {
-                                'title': '% Неудачных поисков (неудачные поиски/всего поисков)'
-                            }
-                        }
+                        id='example-graph'
+
                     ),
                     dcc.Graph(
                         id='example-graph2',
@@ -204,9 +200,16 @@ def update_graph(start_date,end_date,time_bucket, regions,brands,groups):
     #посчитать отношение м/у двумя рядами! и этот результат будет значения по y для одной группы
 
     manipulator = Data_manipulator()
-    ratio_series = manipulator.calc_filtered(query1.result, query2.result)
-
-
+    ratio_series = manipulator.calc_absolute_filtered(query1.result, query2.result)
+    layout = go.Layout(
+        title='% Неудачных поисков (неудачные поиски/всего поисков)'
+        #margin=go.Margin(l=50, r=50, b=50, t=50),
+        #yaxis={'title': yaxis_title}
+    )
+    return {
+        'data': ratio_series,
+        'layout': layout
+    }
 
     return {
         'data': ratio_series,

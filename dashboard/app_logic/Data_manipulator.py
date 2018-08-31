@@ -2,8 +2,68 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 import operator
-
+import plotly.graph_objs as go
 class Data_manipulator():
+
+
+    def calc_absolute_filtered(self, aggregations_sucsess, aggregations_total):
+
+        graph_data = []
+        length = len(aggregations_sucsess["3"]["buckets"])  # это группы, ряды групп по которым аггрегировали
+        buckets_in_serie = len(aggregations_sucsess["3"]["buckets"][0]["2"]["buckets"])
+        y = np.zeros(shape=(length, buckets_in_serie), dtype=float)
+        time_values = []
+        major = {}
+        for group_i in range(0, length):
+            group = aggregations_sucsess["3"]["buckets"][group_i]
+            # result[group["key"]] = {}
+            #x = []
+            #y1 = []
+            #y2 = []
+
+
+            l2 = len(group["2"]["buckets"])  # это временной ряд
+
+            for time_bucket_i in range(0, l2):
+                time_bucket = group["2"]["buckets"][time_bucket_i]
+                if group_i == 0:
+                    time_values.append(datetime.utcfromtimestamp(time_bucket["key"] / 1000).strftime('%Y:%m:%d:%H:%M'))
+                total = aggregations_total["3"]["buckets"][group_i]["2"]["buckets"][time_bucket_i]["1"]["value"]
+
+                #y1.append(total)#всего поисков
+                y[group_i][time_bucket_i] = total
+                #y2.append(time_bucket["1"]["value"])#удачных поисков
+            #sum_over_request_period = sum(y[group_i])
+
+
+
+            major[group_i] = sum(y[group_i])
+
+        #total = sum(major)
+        series = [(k, major[k]) for k in sorted(major, key=major.get, reverse=True)]
+        l2 = len(series)
+        #cumulative_percent = 0
+        for i in range(0, l2):
+            val_container = series[i]
+            #val = val_container[1]
+
+            #group_percent = (val * 100) / total
+            #cumulative_percent += group_percent
+
+            graph_data.append({
+                "x": np.asarray(time_values),
+                "y": np.asarray(y[val_container[0]]),
+                "mode": 'lines',
+                "name": aggregations_sucsess["3"]["buckets"][val_container[0]]["key"]
+            })
+            if i ==10:
+                break
+            #if cumulative_percent > 95:
+                #break
+
+
+        return graph_data
+
 
     def calc_filtered(self,aggregations_sucsess,aggregations_total):
         #проийтись посчитать сумму по стобцу временного интервала п овсем группам(самому крайнему группируемому полю)
@@ -14,16 +74,17 @@ class Data_manipulator():
 
         time_values = []
         buckets_in_serie = len(aggregations_sucsess["3"]["buckets"][0]["2"]["buckets"])  # количество временных интервалов в ряду
-        y = np.zeros(shape=(length, buckets_in_serie))
-
+        y = np.empty(shape=(length, buckets_in_serie),dtype=float)
+        #y[:] = np.nan
+        y.fill(np.nan)
 
         for time_bucket_i in range(0,buckets_in_serie):
             d = {}
             total = 0
             for group_i in range(0, length):
                 if group_i==0:
-                    time = aggregations_sucsess["3"]["buckets"][group_i]["2"]["buckets"][time_bucket_i]["key"]
-                    time_values.append(datetime.utcfromtimestamp(time/1000).strftime('%H:%M'))
+                    time = aggregations_total["3"]["buckets"][group_i]["2"]["buckets"][time_bucket_i]["key"]
+                    time_values.append(datetime.utcfromtimestamp(time/1000).strftime('%Y:%m:%d:%H:%M'))
 
                 total_sum_over_time_period = aggregations_total["3"]["buckets"][group_i]["2"]["buckets"][time_bucket_i]["1"]["value"]
                 #time_bucket.append(total_sum_over_time_period)
@@ -39,35 +100,39 @@ class Data_manipulator():
             time_bucket = [(k, d[k]) for k in sorted(d, key=d.get, reverse=True)]
 
             cumulative_percent = 0
-
-            for i in range(0,len(time_bucket)):
+            l2 = len(time_bucket)
+            for i in range(0,l2):
 
                 val_container = time_bucket[i]
                 val = val_container[1]
 
                 group_percent = (val * 100)/total
 
+
+                #в нужную группу по нужному периоду кладем значение деленного удачных на всего
+
+                #y[val_container[0]][time_bucket_i] = (aggregations_sucsess["3"]["buckets"][val_container[0]]["2"]["buckets"][time_bucket_i]["1"]["value"] / val)
+                y[val_container[0]][time_bucket_i] = val
+
                 cumulative_percent += group_percent
                 if cumulative_percent > 95:
                     break
-                #в нужную группу по нужному периоду кладем значение деленного удачных на всего
-                if val == 0:
-                    y[val_container[0]][time_bucket_i] = 1
-                else:
-                    y[val_container[0]][time_bucket_i] = 1-(aggregations_sucsess["3"]["buckets"][val_container[0]]["2"]["buckets"][time_bucket_i]["1"]["value"] / val)
         #если в матрице есть все строки нулевые то эти группы мы не показываем!
 
         for group_i in range(0,y.shape[0]):
 
-            if np.any(y[group_i]):#если вся строка не нулевая
-                graph_data.append({
-                    "x": np.asarray(time_values),
-                    "y": y[group_i],
-                    "mode": 'lines',
-                    "name": aggregations_sucsess["3"]["buckets"][group_i]["key"]
-                })
+            if np.isnan(y[group_i]).all()==False:#np.any(y[group_i]):#если вся строка NAN
+                #y[group_i][np.isnan(y[group_i])] = 0
+                trace_val = go.Scatter(
+                    x=np.asarray(time_values),
+                    y=y[group_i],
+                    mode='lines',
+                    name=aggregations_sucsess["3"]["buckets"][group_i]["key"]
+                )
+                graph_data.append(trace_val)
 
         return graph_data
+        #todo фильтровать по самым 95% неудачным из самых искомых!
 
     def calc_ratio(self,aggregations_sucsess,aggregations_total):
 
@@ -87,7 +152,7 @@ class Data_manipulator():
             for time_bucket_i in range(0, l2):
                 time_bucket = group["2"]["buckets"][time_bucket_i]
                 if group_i==0:
-                    time_values.append(datetime.utcfromtimestamp(time_bucket["key"]/1000).strftime('%H:%M'))
+                    time_values.append(datetime.utcfromtimestamp(time_bucket["key"]/1000).strftime('%Y:%m:%d:%H:%M'))
                 total = aggregations_total["3"]["buckets"][group_i]["2"]["buckets"][time_bucket_i]["1"]["value"]
 
                 if total==0:
@@ -96,10 +161,10 @@ class Data_manipulator():
 
                     y.append(1-(time_bucket["1"]["value"]/total))
 
-            x = time_values
+
 
             graph_data.append({
-                "x": np.asarray(x),
+                "x": np.asarray(time_values),
                 "y": np.asarray(y),
                 "mode": 'lines',
                 "name": group["key"]
@@ -127,11 +192,11 @@ class Data_manipulator():
             for time_bucket_i in range(0, l2):
                 time_bucket = group["2"]["buckets"][time_bucket_i]
                 if group_i == 0:
-                    time_values.append(datetime.utcfromtimestamp(time_bucket["key"] / 1000).strftime('%H:%M'))
+                    time_values.append(datetime.utcfromtimestamp(time_bucket["key"] / 1000).strftime('%Y:%m:%d:%H:%M'))
                 total = aggregations_total["3"]["buckets"][group_i]["2"]["buckets"][time_bucket_i]["1"]["value"]
 
                 y1.append(total)#всего поисков
-                y2.append(time_bucket["1"]["value"])#удачных поисков
+                #y2.append(time_bucket["1"]["value"])#удачных поисков
 
 
 
@@ -144,12 +209,15 @@ class Data_manipulator():
                 "name": group["key"]+". Всего поисков"
             })
 
+            """
             graph_data.append({
                 "x": np.asarray(x),
                 "y": np.asarray(y2),
                 "mode": 'lines',
                 "name": group["key"]+". Удачных поисков"
             })
+            """
+
 
 
         return graph_data
@@ -172,7 +240,7 @@ class Data_manipulator():
             for time_bucket_i in range(0, l2):
                 time_bucket = group["2"]["buckets"][time_bucket_i]
                 if group_i==0:
-                    time_values.append(datetime.utcfromtimestamp(time_bucket["key"]/1000).strftime('%H:%M'))
+                    time_values.append(datetime.utcfromtimestamp(time_bucket["key"]/1000).strftime('%Y:%m:%d:%H:%M'))
                 total = aggregations_total["3"]["buckets"][group_i]["2"]["buckets"][time_bucket_i]["1"]["value"]
 
                 if total==0:
