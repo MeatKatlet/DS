@@ -85,9 +85,19 @@ def render_content(tab):
                 ),
                 #todo сделать фильтр по самым важным группам!
                     #группы с 95% самых искомых за каждый аггрегируемый по времени период - зависит от выбранного периода
+                        #посчитать за период сумму всего поисков по всем группам - 100%
+                        #получить по каждой группе товаров количество total поисков в абсолютных числах
+                        #посчитать % от всего за период для каждой группы
+                        #отсортировать эти % по убыванию, отрезать хвост 5%
+
                     #из них далее выбираем группы только стабильные(проверить стационарность ряда), выбрать те группы имеющие самые стационарные значения на самых больших промежутках времени от текущего иомента!
                     #выбрать имеющие самые длинные тренды на падение
                 #данные у меня заполняются медленно, что можно сделать?
+                #TODO нужно сделать справочники json всех городов, всех брендов, всех групп, чтобы класть в бд коды городов, брендов групп(экономияч места на диске)
+                    #эти же справочники будут использоваться для value в контолах управления. по кодам в бд будем отбирать бренды/группы/города
+                # режим быстрого заполнения бд? - делаем запрос на неделю, создаем датафрейм с данными timestamp, идем по фрейму и по 5 минут отбираем!
+                #todo надо класть в бд данные без группировки а как раньше по бренду-группе
+
                 dcc.Dropdown(
                         id='my-dropdown-group',
                         options=[{'label': key, 'value': key} for key in list(group_dict.keys())],
@@ -194,7 +204,7 @@ def update_graph(start_date,end_date,time_bucket, regions,brands,groups):
     #посчитать отношение м/у двумя рядами! и этот результат будет значения по y для одной группы
 
     manipulator = Data_manipulator()
-    ratio_series = manipulator.calc_ratio(query1.result, query2.result)
+    ratio_series = manipulator.calc_filtered(query1.result, query2.result)
 
 
 
@@ -218,6 +228,7 @@ def update_graph(start_date,end_date,time_bucket, regions,brands,groups):
      ]
 )
 def update_graph2(start_date,end_date,time_bucket, regions,brands,groups):
+
     start_timestamp = int(time.mktime(datetime.datetime.strptime(start_date, "%Y-%m-%d").timetuple()))
     end_timestamp = int(time.mktime(datetime.datetime.strptime(end_date, "%Y-%m-%d").timetuple()))
 
@@ -280,6 +291,7 @@ def update_graph2(start_date,end_date,time_bucket, regions,brands,groups):
      ]
 )
 def update_graph3(start_date,end_date,time_bucket, regions,brands,groups):
+
     start_timestamp = int(time.mktime(datetime.datetime.strptime(start_date, "%Y-%m-%d").timetuple()))
     end_timestamp = int(time.mktime(datetime.datetime.strptime(end_date, "%Y-%m-%d").timetuple()))
 

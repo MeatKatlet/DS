@@ -42,8 +42,12 @@ class Elastic_time_series_ratio_calculator(Base_Elastic):
         query = {
             "bool": {
                 "must": [
-                    {"range":{"@timestamp":{"gte":str(self.from_timestamp),"lte":str(self.to_timestamp),"format":"epoch_millis"}}}
-
+                    {"range":{"@timestamp":{"gte":str(self.from_timestamp),"lte":str(self.to_timestamp),"format":"epoch_millis"}}},
+                    {
+                        "match": {
+                            "brand": "-"
+                        }
+                    }
 
                 ]
             }
