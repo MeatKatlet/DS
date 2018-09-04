@@ -9,6 +9,7 @@ import os
 import csv
 import pickle
 from region_matrix.Filter_fabric import Filter_fabric
+import collections
 
 def memory_usage_psutil():
     # return the memory usage in MB
@@ -18,44 +19,16 @@ def memory_usage_psutil():
 class Only_matrix_Search_results_events(Search_results_events):
     #nsi_not_in_matrix = False
 
-    def add_matrix_dictionary_to_class(self, filter=dict):
+    def add_matrix_dictionary_to_class(self, filter=None):
 
         self.region_article ={}
-        #self.region_article["Новосибирск"] = {}
-        #self.region_article["Санкт-Петербург"] = {}
+
         self.region_nsi ={}
-        """
-        #self.region_nsi["Новосибирск"] ={}
-        #self.region_nsi["Санкт-Петербург"] ={}
-        #names=["Nom_Name","Nom_Code","Artikul","SKlad_Code","SKlad_Name","CFO_Code","CFO_Name","NomGr","MarkGr","SinMarkGr","Brand"]
-        #matrix =
-        matrix = pd.read_csv("matrixNom.csv", sep=';')
-        #matrix = matrix[matrix["CFO_Name"]=="Новосибирск",matrix["CFO_Name"]=="Санкт-Петербург"]
-        #array = ["Новосибирск", "Санкт-Петербург"]
 
-        array = ["Новосибирск"]
-        #self.matrix = matrix.loc[matrix["CFO_Name"].isin(array)]
-        rows = matrix.shape[0]
-        for row in range(0,rows,1):
-            line = matrix.iloc[row]
-            if line[6] not in self.region_article:
-                self.region_article[line[6]] = {}
-                self.region_article[line[6]][line[2]] = 1
-                self.region_nsi[line[6]] = {}
-                self.region_nsi[line[6]][line[1]] = 1
-            else:
-                self.region_article[line[6]][line[2]] = 1
-                self.region_nsi[line[6]][line[1]] = 1
-
-
-        del matrix
-        a=1
-        print(memory_usage_psutil())
-        """
         path = "region_matrix_pure.csv"
 
 
-        #todo проход по файлу ! - подготовить файл - убрать все имена! - первая колонка
+        #проход по файлу
         fp = open(path, encoding='utf-8')
 
         prev_line = ''
@@ -67,14 +40,15 @@ class Only_matrix_Search_results_events(Search_results_events):
                     prev_line = line
                     continue
                 splitted  = list(csv.reader([prev_line],delimiter=';'))
-                nsi = splitted[0][0]  # фильтровать!
-                article = splitted[0][1]  # фильтровать!
+                nsi = splitted[0][0]
+                article = splitted[0][1]
 
                 region = splitted[0][2]
 
-                if region not in filter["regions"] or article not in filter["articules"] or nsi not in filter["nsi"]:
-                    prev_line = line
-                    continue
+                if filter is not None:
+                    if region not in filter["regions"] or article not in filter["articules"] or nsi not in filter["nsi"]:
+                        prev_line = line
+                        continue
 
                 if region not in self.region_article:
                     self.region_article[region] = {}
@@ -88,7 +62,7 @@ class Only_matrix_Search_results_events(Search_results_events):
 
                 prev_line = line
             else:
-                prev_line = prev_line + line
+                #prev_line = prev_line + line
                 prev_line = ""
                 continue
 
@@ -169,6 +143,35 @@ class Only_matrix_Search_results_events(Search_results_events):
 
         return [result,q]
 
+
+    def add_to_frame(self,search_uid,search_query,brand_code,region,group_code,result,timestamp=0):
+        #только если не в конфликтых уже
+        #if search_uid not in self.founded_several_combinations:
+            if timestamp!=0:
+
+                self.all_searches_dict[self.row_count] = [
+                    timestamp,
+                    search_uid,
+                    search_query,
+                    brand_code,
+                    self.regions_dict[region],
+                    group_code,
+                    result
+                ]
+                self.row_count += 1
+            else:
+                self.all_searches_dict[self.row_count] = [
+
+                    search_uid,
+                    search_query,
+                    brand_code,
+                    self.regions_dict[region],
+                    group_code,
+                    result
+                ]
+
+                self.row_count += 1
+
     def do_logic(self, list_of_elements):
         # list_of_elements - это список объектов из объекта hits в результате выдачи
         # здесь будем фильтровать нужные мне результаты выдачи и сохранять во фрейм
@@ -199,8 +202,8 @@ class Only_matrix_Search_results_events(Search_results_events):
 
                 self.count2 += 1#сколько запросов по товарной матрице региона?
                 #23720 номеров деталей в запросах из товарной матрицы региона
-                if region not in self.regions_dict:
-                   self.regions_dict[region] = len(self.regions_dict)
+                #if region not in self.regions_dict:
+                   #self.regions_dict[region] = len(self.regions_dict)
 
                 length2 = len(hit["results_groups"])
                 #if length2 == 0:
@@ -306,7 +309,7 @@ class Only_matrix_Search_results_events(Search_results_events):
                             group_code = list(brand_group_variants.keys())[0][1]
 
 
-                            self.add_to_frame(search_uid, q, brand_code, region, group_code, 0)
+                            self.add_to_frame(search_uid, q, brand_code, region, group_code, 0,timestamp=hit["timestamp"])
 
                     else:#такого запроса нет в классификаторе!
                         self.not_founded_out_of_articles_range += 1#12755
@@ -334,7 +337,7 @@ class Only_matrix_Search_results_events(Search_results_events):
                         brand_code = list(brand_group_variants.keys())[0][0]
                         group_code = list(brand_group_variants.keys())[0][1]
 
-                        self.add_to_frame(search_uid, q, brand_code, region, group_code, 1)
+                        self.add_to_frame(search_uid, q, brand_code, region, group_code, 1,timestamp=hit["timestamp"])
 
                 elif succsess_searches_count > 1 and len(brand_group_variants) > 0:#несколько совпадений но с одним и тем же
 
@@ -352,17 +355,21 @@ class Only_matrix_Search_results_events(Search_results_events):
                         brand_code = list(brand_group_variants.keys())[0][0]
                         group_code = list(brand_group_variants.keys())[0][1]
 
-                        self.add_to_frame(search_uid,q, brand_code, region, group_code, 1)
+                        self.add_to_frame(search_uid,q, brand_code, region, group_code, 1,timestamp=hit["timestamp"])
 
 
 class Only_matrix_autocomplete_and_single_result_events(Only_matrix_Search_results_events):
-    def __init__(self,brands_dict,groups_dict,all_searches_dict,from_timestamp,region_article,goods_classifier,regions_dict,row_count):
+    def __init__(self,brands_dict,groups_dict,all_searches_dict,from_timestamp,region_article,goods_classifier,regions_dict,row_count,end=0):
 
         self.brands_dict = brands_dict
         self.groups_dict = groups_dict
         self.all_searches_dict = all_searches_dict
         self.from_timestamp = from_timestamp
-        self.to_timestamp = self.from_timestamp + 300  # 5 минут
+
+        if end ==0:
+            self.to_timestamp = self.from_timestamp + 300  # 5 минут
+        else:
+            self.to_timestamp = end  # 5 минут
 
         self.region_article = region_article
         self.goods_classifier = goods_classifier
@@ -430,18 +437,22 @@ class Only_matrix_autocomplete_and_single_result_events(Only_matrix_Search_resul
                         if "product" in hit["delivery_types"] and hit["delivery_types"]["product"] == "Росско" or hit["delivery_types"]["product"] == "Росско/ТСП":#не ТСП (только свои), на локальном складе не продаются ТСП
                         #значит есть в наличии!
                             result = True
-                            self.add_to_frame(search_uid, article, res[1][0], region, res[1][1], 1)
+                            self.add_to_frame(search_uid, article, res[1][0], region, res[1][1], 1,timestamp=hit["timestamp"])
 
                 if result == False:
 
-                    self.add_to_frame(search_uid, article, res[1][0], region, res[1][1], 0)
+                    self.add_to_frame(search_uid, article, res[1][0], region, res[1][1], 0,timestamp=hit["timestamp"])
 
 
 class Only_matrix_Resolve_Conflict_situations(Search_results_events):
     #на вход список search_uid выдач с конфликтными ситуациями
-    def __init__(self,from_timestamp,brand_dict,group_dict,founded_several_combinations,all_searches_dict,region_article,goods_classifier,regions_dict,row_count):
+    def __init__(self,from_timestamp,brand_dict,group_dict,founded_several_combinations,all_searches_dict,region_article,goods_classifier,regions_dict,row_count,end=0):
         self.from_timestamp = from_timestamp
-        self.to_timestamp = self.from_timestamp + 300  # 5 минут
+        if end==0:
+            self.to_timestamp = self.from_timestamp + 300  # 5 минут
+        else:
+            self.to_timestamp = end
+        self.full_mode = end
         self.brand_dict = brand_dict
         self.group_dict = group_dict
         self.all_searches_dict = all_searches_dict
@@ -513,6 +524,33 @@ class Only_matrix_Resolve_Conflict_situations(Search_results_events):
 
         return [result,q]
 
+    def add_to_frame(self,search_uid,search_query,brand_code,region,group_code,result,timestamp=0):
+        #только если не в конфликтых уже
+        #if search_uid not in self.founded_several_combinations:
+            if timestamp!=0:
+
+                self.all_searches_dict[self.row_count] = [
+                    timestamp,
+                    search_uid,
+                    search_query,
+                    brand_code,
+                    self.regions_dict[region],
+                    group_code,
+                    result
+                ]
+                self.row_count += 1
+            else:
+                self.all_searches_dict[self.row_count] = [
+
+                    search_uid,
+                    search_query,
+                    brand_code,
+                    self.regions_dict[region],
+                    group_code,
+                    result
+                ]
+
+                self.row_count += 1
     def do_logic(self, list_of_elements):
         length = len(list_of_elements) - 1
         for i in range(0, length, 1):
@@ -567,7 +605,8 @@ class Only_matrix_Resolve_Conflict_situations(Search_results_events):
                 event = elem[events[i]]
                 if event["event"] == "search":#первое событие выдачи в цепи(это оно и должно быть проблемным)
                     stage +=1
-                    if stage > 1 and event["page_number"] > 1 and event["search_query"] != prev_search_query :
+
+                    if "page_number" in event and stage > 1 and event["page_number"] > 1 and event["search_query"] != prev_search_query :
                         #то это странная ситуация и как-бы новыйц поиск?
                         break
                     prev_search_query = event["search_query"]
@@ -575,6 +614,12 @@ class Only_matrix_Resolve_Conflict_situations(Search_results_events):
                     region = event["region"]
                     res = self.check_variants_articule(search_query, region)
                     search_query = res[1]
+
+                    if self.full_mode!=0:
+                        timestamp = event["timestamp"]
+                    else:
+                        timestamp = 0
+
 
                 #elif stage > 0 and event["event"] != "add_to_cart" and event["event"] != "product_card_view":
                     #not_target_event += 1
@@ -653,19 +698,19 @@ class Only_matrix_Resolve_Conflict_situations(Search_results_events):
                 #разрешен
                 is_search_result_resolved = True
 
-                self.add_to_frame(search_uid, search_query, card_combination[0], region, card_combination[1], card_available)
+                self.add_to_frame(search_uid, search_query, card_combination[0], region, card_combination[1], card_available,timestamp=timestamp)
             elif card == 0 and view == 1 and cart == 0:
                 # разрешен
                 is_search_result_resolved = True
-                self.add_to_frame(search_uid, search_query, view_combination[0], region, view_combination[1], view_available)
+                self.add_to_frame(search_uid, search_query, view_combination[0], region, view_combination[1], view_available,timestamp=timestamp)
             elif card == 0 and cart == 1:
                 # разрешен
                 is_search_result_resolved = True
-                self.add_to_frame(search_uid, search_query, cart_combination[0], region, cart_combination[1], cart_available)
+                self.add_to_frame(search_uid, search_query, cart_combination[0], region, cart_combination[1], cart_available,timestamp=timestamp)
             elif card >= 1 and cart == 1:
                 #разрешен
                 is_search_result_resolved = True
-                self.add_to_frame(search_uid, search_query, cart_combination[0], region, cart_combination[1], cart_available)
+                self.add_to_frame(search_uid, search_query, cart_combination[0], region, cart_combination[1], cart_available,timestamp=timestamp)
 
             if is_search_result_resolved==True:
                 resolved +=1
@@ -679,22 +724,29 @@ def memory_usage_psutil():
 class Only_matrix_search_plots_factory(Search_plots_factory):
     prefix = "matrix"
     filter_regions = []
-    def get_main_dataframe(self, start=0,from_db=True):#получает главный фрейм из бд или файла и сохраняет его в атрибут класса, для дальнейшего доступа к нему откуда угодно
+    def get_main_dataframe(self, brands=dict,groups=dict,regions=dict, start=0,from_db=True):#получает главный фрейм из бд или файла и сохраняет его в атрибут класса, для дальнейшего доступа к нему откуда угодно
 
 
         if from_db:
 
             #todo сделать файл справочника - убрать имена!
             filter_fabric = Filter_fabric(start)
+
             #todo могут быть пустые значения т.к. не было данных!
             filter_fabric.get_only_used_data_from_dictionaries()
 
             if len(filter_fabric.filter["articules"])==0:
                 return False
 
-            search_results = Only_matrix_Search_results_events(start=start, filter=filter_fabric.filter["articules"])# searches_input_field.list_of_search_uids передавать когда понадобится фильтрация по мобытию вставки номера детали в строку поиска
+            search_results = Only_matrix_Search_results_events(brands=brands,groups=groups,regions=regions,start=start, filter=filter_fabric.filter["articules"])# searches_input_field.list_of_search_uids передавать когда понадобится фильтрация по мобытию вставки номера детали в строку поиска
+
 
             search_results.add_matrix_dictionary_to_class(filter=filter_fabric.filter)
+            l = len(search_results.region_article)
+
+            search_results.regions_dict = collections.OrderedDict(zip(list(search_results.region_article.keys()), [i for i in range(0,l,1)]))#создали справочник регионов по товарной матрице регионов!
+
+
 
 
             q = search_results.query_make3
@@ -705,7 +757,7 @@ class Only_matrix_search_plots_factory(Search_plots_factory):
                  #pickle.dump(search_results, output_file)
 
 
-            tmpframe = pd.DataFrame.from_dict(search_results.all_searches_dict, orient='index',columns=['Search_uid', 'Search_query', 'brand', 'region', 'group','Search_result'])
+            #tmpframe = pd.DataFrame.from_dict(search_results.all_searches_dict, orient='index',columns=['Search_uid', 'Search_query', 'brand', 'region', 'group','Search_result'])
             #tmpframe.to_csv('out_tmp_' + self.prefix + '.csv', index=False)
             #search_results.types_of_results.to_csv("test_10000.csv", index=False)
             #добавляем однозначные поиски
@@ -718,11 +770,12 @@ class Only_matrix_search_plots_factory(Search_plots_factory):
                 search_results.goods_classifier,
                 search_results.regions_dict,
                 search_results.row_count
+
             )
 
             q = additional_search_results.query_get_autocompletes_and_single_suggest
             additional_search_results.get_data(q)
-            tmpframe = pd.DataFrame.from_dict(additional_search_results.all_searches_dict, orient='index',columns=['Search_uid', 'Search_query', 'brand', 'region', 'group','Search_result'])
+            #tmpframe = pd.DataFrame.from_dict(additional_search_results.all_searches_dict, orient='index',columns=['Search_uid', 'Search_query', 'brand', 'region', 'group','Search_result'])
             #tmpframe.to_csv('out_tmp_' + self.prefix + '.csv', index=False)
 
             #with open(r"additional_search_results.pickle", "wb") as output_file:
@@ -765,6 +818,147 @@ class Only_matrix_search_plots_factory(Search_plots_factory):
 
             #self.draw_statistics(search_results)
             self.collapse_rows_from_one_pagination_chain()
+
+
+            #self.main_frame.to_csv('out_'+self.prefix+ '.csv', index=False)
+            self.first_timestamp_from_query = search_results.first_timestamp_from_query
+
+            """
+            with open('special_'+self.prefix+ '.json', 'w') as fp:
+                json.dump(self.first_timestamp_from_query, fp)
+            with open('brand_dict_'+self.prefix+ '.json', 'w') as fp:
+                json.dump(self.brand_dict, fp)
+            with open('group_dict_'+self.prefix+ '.json', 'w') as fp:
+                json.dump(self.group_dict, fp)
+            with open('region_dict_'+self.prefix+ '.json', 'w') as fp:
+                json.dump(self.region_dict, fp)
+            """
+
+
+        else:
+            #special = pd.read_csv('special.csv')
+            #self.not_succsess_searches = special.iloc[0][1]
+
+            #search_results = Search_results_events()
+            #self.brand_dict = search_results.brands_dict
+            #self.group_dict = search_results.groups_dict
+            #self.region_dict = search_results.regions_dict
+            #self.goods_classifier = search_results.goods_classifier
+
+            #self.main_frame = pd.read_csv('out2.csv')
+            #self.main_frame = pd.read_csv('out.csv')
+
+
+            #before_frame = self.collapse_rows_from_one_pagination_chain()
+
+            #v = pd.read_csv('validated.csv')
+            #self.test_frame(before_frame)
+
+            self.main_frame = pd.read_csv('out_'+self.prefix+ '.csv')
+            #self.collapse_rows_from_one_pagination_chain()
+            with open('special_'+self.prefix+ '.json') as data_file:
+                self.first_timestamp_from_query = json.load(data_file)
+            with open('brand_dict_'+self.prefix+ '.json') as data_file:
+                self.brand_dict = json.load(data_file)
+            with open('group_dict_'+self.prefix+ '.json') as data_file:
+                self.group_dict = json.load(data_file)
+            with open('region_dict_'+self.prefix+ '.json') as data_file:
+                self.region_dict = json.load(data_file)
+            #+++++++++++++++++++++++++++++++++++++++++++++++
+            #writer = pd.ExcelWriter('main_frame.xlsx')
+            #self.main_frame.to_excel(writer, 'Sheet1')
+
+            #writer.save()
+        return True
+
+    def get_main_dataframe_fill(self, brands=dict,groups=dict,regions=dict, start=0,end=0,from_db=True):#получает главный фрейм из бд или файла и сохраняет его в атрибут класса, для дальнейшего доступа к нему откуда угодно
+
+
+        if from_db:
+
+
+            search_results = Only_matrix_Search_results_events(brands=brands,groups=groups,regions=regions,start=start,end=end)# searches_input_field.list_of_search_uids передавать когда понадобится фильтрация по мобытию вставки номера детали в строку поиска
+
+
+            search_results.add_matrix_dictionary_to_class()
+            l = len(search_results.region_article)
+
+            search_results.regions_dict = collections.OrderedDict(zip(list(search_results.region_article.keys()), [i for i in range(0,l,1)]))#создали справочник регионов по товарной матрице регионов!
+
+
+
+
+            q = search_results.query_make3
+            #q = search_results.test_query
+            search_results.get_data(q)
+
+            #with open(r"search_resultst.pickle", "wb") as output_file:
+                 #pickle.dump(search_results, output_file)
+
+
+            #tmpframe = pd.DataFrame.from_dict(search_results.all_searches_dict, orient='index',columns=['Search_uid', 'Search_query', 'brand', 'region', 'group','Search_result'])
+            #tmpframe.to_csv('out_tmp_' + self.prefix + '.csv', index=False)
+            #search_results.types_of_results.to_csv("test_10000.csv", index=False)
+            #добавляем однозначные поиски
+            additional_search_results = Only_matrix_autocomplete_and_single_result_events(
+                search_results.brands_dict,
+                search_results.groups_dict,
+                search_results.all_searches_dict,
+                search_results.from_timestamp,
+                search_results.region_article,
+                search_results.goods_classifier,
+                search_results.regions_dict,
+                search_results.row_count,
+                end = end
+            )
+
+            q = additional_search_results.query_get_autocompletes_and_single_suggest
+            additional_search_results.get_data(q)
+            #tmpframe = pd.DataFrame.from_dict(additional_search_results.all_searches_dict, orient='index',columns=['Search_uid', 'Search_query', 'brand', 'region', 'group','Search_result'])
+            #tmpframe.to_csv('out_tmp_' + self.prefix + '.csv', index=False)
+
+            #with open(r"additional_search_results.pickle", "wb") as output_file:
+                 #pickle.dump(search_results, output_file)
+
+            #разрешаем конфликты
+            resolver = Only_matrix_Resolve_Conflict_situations(
+                search_results.from_timestamp,
+                search_results.brands_dict,
+                search_results.groups_dict,
+                search_results.founded_several_combinations,
+                additional_search_results.all_searches_dict,
+                search_results.region_article,
+                search_results.goods_classifier,
+                search_results.regions_dict,
+                search_results.row_count,
+                end=end
+            )
+            resolver.resolve_dispatcher(list(search_results.founded_several_combinations.keys()))
+            #with open(r"resolver.pickle", "wb") as output_file:
+                 #pickle.dump(search_results, output_file)
+
+
+            #todo проверить чтобы search_results.all_searches_dict было больше чем до автокомлита!
+
+            self.main_frame = pd.DataFrame.from_dict(resolver.all_searches_dict, orient='index',columns=["timestamp",'Search_uid','Search_query', 'brand', 'region', 'group', 'Search_result'])
+            search_results.all_searches_dict = {}
+            #self.main_frame = search_results.all_searches
+            #todo справочники должны быть едиными! независимо от того за какой момент времени делается выборка?
+            self.brand_dict = search_results.brands_dict
+            self.group_dict = search_results.groups_dict
+            self.region_dict = search_results.regions_dict
+            search_results.goods_classifier = {}
+            #self.goods_classifier = search_results.goods_classifier
+            self.filter_regions = list(search_results.region_article.keys())
+            #self.founded_several_combinations = search_results.founded_several_combinations
+            #self.not_succsess_searches = search_results.not_succsess
+
+            #special = pd.DataFrame(columns=["Data"])
+            #special.loc[len(special)] = [self.not_succsess_searches]
+            #special.to_csv('special.csv')#сохранить в файл
+
+            #self.draw_statistics(search_results)
+            self.collapse_rows_from_one_pagination_chain(start)
 
 
             #self.main_frame.to_csv('out_'+self.prefix+ '.csv', index=False)

@@ -7,18 +7,19 @@ import csv
 
 class Frame_partial_reader():
 
-    def __init__(self,filter=dict):
+    def __init__(self,brands,groups,filter=None):
         self.parse_result = {}
         self.dublicates = 0
         self.dublicates2 = 0
         self.no_brand_or_group = 0
-        self.brands = collections.OrderedDict()
-        self.groups = collections.OrderedDict()
+        self.brands = brands#collections.OrderedDict()
+        self.groups = groups#collections.OrderedDict()
         self.articles = collections.OrderedDict()
 
         self.nsi_dict = pd.DataFrame(columns=["NSI","Article","Brand", "Group"])
 
         self.filter = filter
+
 
     def read4(self, path):
         goods_classifier = pd.read_csv(path, sep=';', names=["NSI", "Brand", "oemnumber", "name", "number", "group"])
@@ -145,10 +146,10 @@ class Frame_partial_reader():
                     group = splitted[0][3]
 
 
-
-                    if oemnumber not in self.filter:#todo очистить заранее все артикулы!
-                        prev_line = line
-                        continue
+                    if self.filter is not None:
+                        if oemnumber not in self.filter:#todo очистить заранее все артикулы!
+                            prev_line = line
+                            continue
 
 
                     if brand != brand or group != group:  # проверка на Nan
@@ -158,38 +159,41 @@ class Frame_partial_reader():
 
                     # hex = str(hash(brand + group))
 
-                    if brand not in self.brands:
+                    #if brand not in self.brands:
                         # todo что делать с апострофом? в поиске выдача может быть вместе с ним
                         # brand = brand.replace(r"'", "").replace("\\", "")
-                        self.brands[brand] = len(self.brands)
+                        #self.brands[brand] = len(self.brands)
                     gs = group.strip()
-                    if gs not in self.groups:
-                        self.groups[gs] = len(self.groups)
+                    #if gs not in self.groups:
+                        #self.groups[gs] = len(self.groups)
+
 
                     if oemnumber not in self.parse_result:
-                        # d = dict()
-                        # d['brand'] = brand
-                        # d['group'] = group
-                        self.parse_result[oemnumber] = [collections.OrderedDict(),collections.OrderedDict()]
-                        #key = len(self.parse_result[oemnumber][0])
-                        self.parse_result[oemnumber][0][nsi] = 0 #порядковый номер ключа (бренд, группа)
-                        #self.parse_result[oemnumber][1] = collections.OrderedDict()
-                        self.parse_result[oemnumber][1][(self.brands[brand],self.groups[gs])] = 0  # в виде чисел будет ключ (код бренда, код группы)
-
-                    elif oemnumber in self.parse_result:
-                        #key = len(self.parse_result[oemnumber][0])
-                        if (self.brands[brand], self.groups[gs]) in self.parse_result[oemnumber][1]:
-                            l = list(self.parse_result[oemnumber][1].keys())
-
-                            ordered_numbers = dict(zip(l, range(len(l))))
-                            position_of_key_in_list = ordered_numbers[(self.brands[brand], self.groups[gs])]
-
-                        else:
-                            position_of_key_in_list = len(self.parse_result[oemnumber][1])
+                            # d = dict()
+                            # d['brand'] = brand
+                            # d['group'] = group
+                            self.parse_result[oemnumber] = [collections.OrderedDict(), collections.OrderedDict()]
+                            # key = len(self.parse_result[oemnumber][0])
+                            self.parse_result[oemnumber][0][nsi] = 0  # порядковый номер ключа (бренд, группа)
+                            # self.parse_result[oemnumber][1] = collections.OrderedDict()
                             self.parse_result[oemnumber][1][(self.brands[brand], self.groups[gs])] = 0  # в виде чисел будет ключ (код бренда, код группы)
 
+                    elif oemnumber in self.parse_result:
+                            # key = len(self.parse_result[oemnumber][0])
+                            if (self.brands[brand], self.groups[gs]) in self.parse_result[oemnumber][1]:
+                                l = list(self.parse_result[oemnumber][1].keys())
 
-                        self.parse_result[oemnumber][0][nsi] = position_of_key_in_list#порядковый номер ключа (бренд, группа)
+                                ordered_numbers = dict(zip(l, range(len(l))))
+                                position_of_key_in_list = ordered_numbers[(self.brands[brand], self.groups[gs])]
+
+                            else:
+                                position_of_key_in_list = len(self.parse_result[oemnumber][1])
+                                self.parse_result[oemnumber][1][(self.brands[brand], self.groups[gs])] = 0  # в виде чисел будет ключ (код бренда, код группы)
+
+                            self.parse_result[oemnumber][0][nsi] = position_of_key_in_list  # порядковый номер ключа (бренд, группа)
+
+
+
 
 
                     else:

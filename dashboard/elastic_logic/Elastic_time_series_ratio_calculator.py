@@ -4,19 +4,19 @@ class Elastic_time_series_ratio_calculator(Base_Elastic):
 
     def __init__(
             self,
-            from_timestamp="1531932754757",
-            to_timestamp = "1531950998617",
+            from_timestamp,
+            to_timestamp,
             filtered_regions = list(),
             filtered_brand = list(),
             filtered_groups = list(),
-            field_for_grouping = "group",
-            metric_field = "sucsess_searches",
+            field_for_grouping = list("gr"),
+            metric_field = "suc",
             interval_to_aggregate="5m"
 
     ):
 
-        self.from_timestamp = from_timestamp*1000
-        self.to_timestamp = to_timestamp*1000
+        self.from_timestamp = from_timestamp
+        self.to_timestamp = to_timestamp
         self.filtered_regions = filtered_regions
         self.filtered_brand = filtered_brand
         self.filtered_groups = filtered_groups
@@ -42,12 +42,8 @@ class Elastic_time_series_ratio_calculator(Base_Elastic):
         query = {
             "bool": {
                 "must": [
-                    {"range":{"@timestamp":{"gte":str(self.from_timestamp),"lte":str(self.to_timestamp),"format":"epoch_millis"}}},
-                    {
-                        "match": {
-                            "brand": "-"
-                        }
-                    }
+                    {"range":{"@timestamp":{"gte":str(self.from_timestamp),"lte":str(self.to_timestamp)}}}
+
 
                 ]
             }
@@ -57,7 +53,7 @@ class Elastic_time_series_ratio_calculator(Base_Elastic):
             query["bool"]["must"].append(
                 {
                         "terms": {
-                            "@region": self.filtered_regions
+                            "reg": self.filtered_regions
                         }
                 }
             )
@@ -65,7 +61,7 @@ class Elastic_time_series_ratio_calculator(Base_Elastic):
             query["bool"]["must"].append(
                 {
                         "terms": {
-                            "brand": self.filtered_brand
+                            "br": self.filtered_brand
                         }
                 }
             )
@@ -74,44 +70,98 @@ class Elastic_time_series_ratio_calculator(Base_Elastic):
             query["bool"]["must"].append(
                 {
                         "terms": {
-                            "group": self.filtered_groups
+                            "gr": self.filtered_groups
                         }
                 }
             )
 
         return query
 
+    def construct_agg(self,i,agg,remain_part_of_fields=list()):
+        if len(remain_part_of_fields)==0:
+            i = i - 1
+            agg["aggs"] = {
+                        str(i): {
+                            "date_histogram": {
+                                "interval": str(self.interval_to_aggregate),
+                                "field": "@timestamp",
+                                "min_doc_count": 0,
+                                "extended_bounds": {"min": str(self.from_timestamp), "max": str(self.to_timestamp)}
+
+                            },
+                            "aggs": {
+                                str(i-1): {
+                                    "sum": {
+                                        "field": self.metric_field,
+                                        "missing": 0
+                                    }
+                                }
+                            }
+                        }
+                    }
+        elif len(remain_part_of_fields)>0:
+            i = i - 1
+            agg["aggs"] = {
+                str(i): {
+                    "terms": {
+                        "field": str(remain_part_of_fields[0]),
+                        "size": 0,  # по идее должно быть без ограничений
+                        "order": {"_term": "desc"},
+                        "min_doc_count": 1
+                    }
+                }
+            }
+            self.construct_agg(agg["aggs"][str(i)], i, remain_part_of_fields[1:])
+
     #группирует по товарной группе!
     def get_aggs(self):
-        agg = {
-            "3": {
-                "terms": {
-                    "field": str(self.field_for_grouping),
-                    "size": 500,
-                    "order": {"_term": "desc"},
-                    "min_doc_count": 1
-                },
-                "aggs": {
-                    "2": {
-                        "date_histogram": {
-                            "interval": str(self.interval_to_aggregate),
-                            "field": "@timestamp",
-                            "min_doc_count": 0,
-                            "extended_bounds": {"min": str(self.from_timestamp), "max": str(self.to_timestamp)},
-                            "format": "epoch_millis"
-                        },
-                        "aggs": {
-                            "1": {
-                                "sum": {
-                                    "field": self.metric_field,
-                                    "missing": 0
+        if len(self.field_for_grouping)==1:
+
+            agg = {
+                "3": {
+                    "terms": {
+                        "field": str(self.field_for_grouping[0]),
+                        "size": 0,#по идее должно быть без ограничений
+                        "order": {"_term": "desc"},
+                        "min_doc_count": 1
+                    },
+                    "aggs": {
+                        "2": {
+                            "date_histogram": {
+                                "interval": str(self.interval_to_aggregate),
+                                "field": "@timestamp",
+                                "min_doc_count": 0,
+                                "extended_bounds": {"min": str(self.from_timestamp), "max": str(self.to_timestamp)}
+
+                            },
+                            "aggs": {
+                                "1": {
+                                    "sum": {
+                                        "field": self.metric_field,
+                                        "missing": 0
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-        }
+        elif len(self.field_for_grouping) == 2:
+            i = 4
+            agg = {
+                "4": {
+                    "terms": {
+                        "field": str(self.field_for_grouping[0]),
+                        "size": 0,  # по идее должно быть без ограничений
+                        "order": {"_term": "desc"},
+                        "min_doc_count": 1
+                    }
+
+                }
+            }
+
+            self.construct_agg(agg["4"],i,self.field_for_grouping[1:])
+
         return agg
 
     #def do_logic_short(self, aggregations):

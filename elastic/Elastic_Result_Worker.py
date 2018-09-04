@@ -7,15 +7,37 @@ from datetime import datetime
 
 class Elastic_Result_Worker():
 
-    def __init__(self,search_plots_factory,curent_interval_timestamp):
+    def __init__(self,curent_interval_timestamp):
         self.elastic_adress = "http://bielastic.rossko.local:9200/"
         self.elastic_index = "prod_i_m-"
         self.searches_statistics = pd.DataFrame()
         self.curent_interval_timestamp = curent_interval_timestamp
 
-        self.region_dict = list(search_plots_factory.region_dict)
-        self.brand_dict = list(search_plots_factory.brand_dict)
-        self.group_dict = list(search_plots_factory.group_dict)
+        #self.region_dict = list(search_plots_factory.region_dict)
+        #self.brand_dict = list(search_plots_factory.brand_dict)
+        #self.group_dict = list(search_plots_factory.group_dict)
+
+
+    def walk_over_all_data(self,from_date_timestamp,input_frame):#весь массив с меткой времени
+        input_frame.sort_values('bin', ascending=True,inplace=True)
+        input_frame.reset_index(drop=True, inplace=True)
+        rows = input_frame.shape[0]
+        start = 0
+        end = 0
+        current_bin = from_date_timestamp + 300
+        current_bin = input_frame.iloc[0]["bin"]
+        for row in range(0,rows):
+            line = input_frame.iloc[row]
+
+            if line["bin"] != current_bin or row == rows:
+                end = row
+                self.curent_interval_timestamp = int(current_bin)#он пойдет как метка времени в бд
+                self.get_elastic_data_presentation(input_frame[start:end])
+                self.insert_to_bd()#в одном временном интервале!
+                #current_timestamp = line["timestamp"]+300
+                current_bin = line["bin"]
+                start = row
+                #todo mapping в бд поменять!
 
 
     def get_elastic_data_presentation(self,input_frame):
@@ -31,6 +53,24 @@ class Elastic_Result_Worker():
         self.searches_statistics.columns = ["Total_searches", "Sucsess_searches", "Sales_from_sucsess_searches"]
         self.searches_statistics.reset_index(inplace=True)
 
+
+
+    def insert_to_bd(self):
+        rows = self.searches_statistics.shape[0]
+
+        for row in range(0,rows,1):
+            line = self.searches_statistics.iloc[row]
+
+            doc = {}
+
+            doc["reg"] = int(line["region"])
+            doc["br"] = int(line["brand"])
+            doc["gr"] = int(line["group"])
+            doc["t"] = int(line["Total_searches"])
+            doc["suc"] = int(line["Sucsess_searches"])
+            doc["sol"] = int(line["Sales_from_sucsess_searches"])
+            self.insert_document_to_elastic(doc)
+            #id += 1
 
 
 
@@ -102,12 +142,12 @@ class Elastic_Result_Worker():
             # if prev_region != region:
             doc = {}
 
-            doc["@region"] = region
-            doc["brand"] = "-"
-            doc["group"] = group
-            doc["total_searches"] = total
-            doc["sucsess_searches"] = sucsess
-            doc["solded_searches"] = sold
+            doc["@reg"] = region
+            doc["br"] = "-"
+            doc["gr"] = group
+            doc["t"] = total
+            doc["suc"] = sucsess
+            doc["sold"] = sold
 
             self.insert_document_to_elastic(doc, i)
             i += 1
@@ -149,16 +189,16 @@ class Elastic_Result_Worker():
     """
 
 
-    def insert_document_to_elastic(self, doc, id):
+    def insert_document_to_elastic(self, doc):
         doc["@timestamp"] = self.curent_interval_timestamp
         query_string = json.dumps(doc)
         #current_day = "2018.08.18" strftime("%Y.%m.%d", gmtime())
-        current_day = datetime.utcfromtimestamp(int(self.curent_interval_timestamp)/1000).strftime('%Y.%m.%d')
+        current_day = datetime.utcfromtimestamp(int(self.curent_interval_timestamp)).strftime('%Y.%m.%d')
 
 
         headers = {'Accept': 'application/json', 'Content-type': 'application/json'}
 
-        elastic_url = self.elastic_adress+self.elastic_index + current_day + "/doc/"+str(id)
+        elastic_url = self.elastic_adress+self.elastic_index + current_day + "/doc/"
 
 
         while True:
