@@ -31,7 +31,7 @@ def main():
         group_dict = json.load(data_file)
     with open('region_dict_matrix.json') as data_file:
         region_dict = json.load(data_file)
-    #1530403200 - 1530921600 , 1530921600 - 1531526400, 1531526400 - 1532131200,
+    #1530403200 - 1530921600 , 1530921600 - 1531526400, 1531526400 - 1532131200, 1532131200 - 1532736000
     curent_interval_timestamp = 1532131200#todo сделать по параметру?
     to_timestamp = 1532736000 #1 неделя
     #i = 0

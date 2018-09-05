@@ -15,8 +15,8 @@ class Elastic_time_series_ratio_calculator(Base_Elastic):
 
     ):
 
-        self.from_timestamp = from_timestamp
-        self.to_timestamp = to_timestamp
+        self.from_timestamp = from_timestamp*1000
+        self.to_timestamp = to_timestamp*1000
         self.filtered_regions = filtered_regions
         self.filtered_brand = filtered_brand
         self.filtered_groups = filtered_groups
@@ -121,7 +121,7 @@ class Elastic_time_series_ratio_calculator(Base_Elastic):
                 "3": {
                     "terms": {
                         "field": str(self.field_for_grouping[0]),
-                        "size": 0,#по идее должно быть без ограничений
+                        "size": 3000,#по идее должно быть без ограничений
                         "order": {"_term": "desc"},
                         "min_doc_count": 1
                     },

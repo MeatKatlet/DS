@@ -31,6 +31,15 @@ class Data_manipulator():
 
         graph_data = []
         length = len(aggregations_sucsess["3"]["buckets"])  # это группы, ряды групп по которым аггрегировали
+        if length==0:
+            graph_data.append({
+                "x": np.asarray(0),
+                "y": np.asarray(0),
+                "mode": 'lines',
+                "name": "Нет данных"
+            })
+            return graph_data
+
         buckets_in_serie = len(aggregations_sucsess["3"]["buckets"][0]["2"]["buckets"])
         y = np.zeros(shape=(length, buckets_in_serie), dtype=float)
         y2 = np.zeros(shape=(length, buckets_in_serie), dtype=float)
@@ -50,7 +59,7 @@ class Data_manipulator():
             for time_bucket_i in range(0, l2):
                 time_bucket = group["2"]["buckets"][time_bucket_i]
                 if group_i == 0:
-                    time_values.append(datetime.utcfromtimestamp(time_bucket["key"]).strftime('%Y:%m:%d:%H:%M'))
+                    time_values.append(datetime.utcfromtimestamp(time_bucket["key"]/1000).strftime('%Y:%m:%d:%H:%M'))
                 total = aggregations_total["3"]["buckets"][group_i]["2"]["buckets"][time_bucket_i]["1"]["value"]
                 sucsess = aggregations_sucsess["3"]["buckets"][group_i]["2"]["buckets"][time_bucket_i]["1"]["value"]
 
@@ -99,6 +108,14 @@ class Data_manipulator():
         #пройтись 1 раз и сложить в память этот столбец, отсортировать, далее идти п онему второй раз и считать % + считать нарастающий процент и когда он превысит 95 то прекратить, остановиться и
         graph_data = []
         length = len(aggregations_sucsess["3"]["buckets"])  # это группы, ряды групп по которым аггрегировали
+        if length==0:
+            graph_data.append({
+                "x": np.asarray(0),
+                "y": np.asarray(0),
+                "mode": 'lines',
+                "name": "Нет данных"
+            })
+            return graph_data
 
 
         time_values = []
@@ -167,6 +184,14 @@ class Data_manipulator():
 
         graph_data = []
         length = len(aggregations_sucsess["3"]["buckets"])  # это группы, ряды групп по которым аггрегировали
+        if length==0:
+            graph_data.append({
+                "x": np.asarray(0),
+                "y": np.asarray(0),
+                "mode": 'lines',
+                "name": "Нет данных"
+            })
+            return graph_data
 
         time_values = []
 
@@ -206,10 +231,19 @@ class Data_manipulator():
 
         graph_data = []
         length = len(aggregations_sucsess["3"]["buckets"])  # это группы, ряды групп по которым аггрегировали
+        if length==0:
+            graph_data.append({
+                "x": np.asarray(0),
+                "y": np.asarray(0),
+                "mode": 'lines',
+                "name": "Нет данных"
+            })
+            return graph_data
 
         time_values = []
         major = {}
         buckets_in_serie = len(aggregations_sucsess["3"]["buckets"][0]["2"]["buckets"])
+        y = np.zeros(shape=(length, buckets_in_serie), dtype=float)
         y1 = np.zeros(shape=(length, buckets_in_serie), dtype=float)
         y2 = np.zeros(shape=(length, buckets_in_serie), dtype=float)
 
@@ -230,10 +264,17 @@ class Data_manipulator():
 
                 #y1.append(total)#всего поисков
                 #y2.append(time_bucket["1"]["value"])#удачных поисков
-                y1[group_i][time_bucket_i] = total#всего поисков
-                y2[group_i][time_bucket_i] = time_bucket["1"]["value"]#удачных поисков
+                y[group_i][time_bucket_i] = total
+                if total==0:
+                    y1[group_i][time_bucket_i] = np.nan
+                    y2[group_i][time_bucket_i] = np.nan
 
-            major[group_i] = sum(y1[group_i])
+                else:
+
+                    y1[group_i][time_bucket_i] = total#всего поисков
+                    y2[group_i][time_bucket_i] = time_bucket["1"]["value"]#удачных поисков
+
+            major[group_i] = sum(y[group_i])
             #x = time_values
 
 
@@ -275,6 +316,15 @@ class Data_manipulator():
 
         time_values = []
         major = {}
+        if length==0:
+            graph_data.append({
+                "x": np.asarray(0),
+                "y": np.asarray(0),
+                "mode": 'lines',
+                "name": "Нет данных"
+            })
+            return graph_data
+
         buckets_in_serie = len(aggregations_sucsess["3"]["buckets"][0]["2"]["buckets"])
         y = np.zeros(shape=(length, buckets_in_serie), dtype=float)
         y1 = np.zeros(shape=(length, buckets_in_serie), dtype=float)
@@ -292,7 +342,7 @@ class Data_manipulator():
             for time_bucket_i in range(0, l2):
                 time_bucket = group["2"]["buckets"][time_bucket_i]
                 if group_i==0:
-                    time_values.append(datetime.utcfromtimestamp(time_bucket["key"]).strftime('%Y:%m:%d:%H:%M'))
+                    time_values.append(datetime.utcfromtimestamp(time_bucket["key"]/1000).strftime('%Y:%m:%d:%H:%M'))
                 total = aggregations_total["3"]["buckets"][group_i]["2"]["buckets"][time_bucket_i]["1"]["value"]
 
                 y1[group_i][time_bucket_i] = total  # всего поисков

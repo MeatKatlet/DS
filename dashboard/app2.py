@@ -163,11 +163,11 @@ def update_graph(start_date,end_date,time_bucket, regions,brands,groups,group_fi
     end_timestamp = int(time.mktime(datetime.datetime.strptime(end_date, "%Y-%m-%d").timetuple()))
 
     #todo для ускорения
-    if isinstance(regions, str):
+    if isinstance(regions, str) or isinstance(regions, int):
         regions = [regions]
-    if isinstance(brands, str):
+    if isinstance(brands, str) or isinstance(brands, int):
         brands = [brands]
-    if isinstance(groups, str):
+    if isinstance(groups, str) or isinstance(groups, int):
         groups = [groups]
 
 
@@ -241,11 +241,11 @@ def update_graph2(start_date,end_date,time_bucket, regions,brands,groups,group_f
     end_timestamp = int(time.mktime(datetime.datetime.strptime(end_date, "%Y-%m-%d").timetuple()))
 
 
-    if isinstance(regions, str):
+    if isinstance(regions, str)  or isinstance(regions, int):
         regions = [regions]
-    if isinstance(brands, str):
+    if isinstance(brands, str)  or isinstance(brands, int):
         brands = [brands]
-    if isinstance(groups, str):
+    if isinstance(groups, str) or isinstance(groups, int):
         groups = [groups]
 
     if isinstance(group_fields, str):
@@ -279,7 +279,7 @@ def update_graph2(start_date,end_date,time_bucket, regions,brands,groups,group_f
 
     query2.get_aggregated_data(q, size=0)
 
-    manipulator = Data_manipulator(brand_dict,group_dict)
+    manipulator = Data_manipulator(brand_dict,group_dict,group_fields)
     ratio_series = manipulator.calc_absolute(query1.result, query2.result)
 
     return {
@@ -309,11 +309,11 @@ def update_graph3(start_date,end_date,time_bucket, regions,brands,groups,group_f
     end_timestamp = int(time.mktime(datetime.datetime.strptime(end_date, "%Y-%m-%d").timetuple()))
 
 
-    if isinstance(regions, str):
+    if isinstance(regions, str) or isinstance(regions, int):
         regions = [regions]
-    if isinstance(brands, str):
+    if isinstance(brands, str) or isinstance(brands, int):
         brands = [brands]
-    if isinstance(groups, str):
+    if isinstance(groups, str) or isinstance(groups, int):
         groups = [groups]
 
     if isinstance(group_fields, str):
@@ -347,7 +347,7 @@ def update_graph3(start_date,end_date,time_bucket, regions,brands,groups,group_f
 
     query2.get_aggregated_data(q, size=0)
 
-    manipulator = Data_manipulator(brand_dict,group_dict)
+    manipulator = Data_manipulator(brand_dict,group_dict,group_fields)
     ratio_series = manipulator.calc_diff(query1.result, query2.result)
 
     return {

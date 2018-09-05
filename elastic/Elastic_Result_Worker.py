@@ -190,7 +190,7 @@ class Elastic_Result_Worker():
 
 
     def insert_document_to_elastic(self, doc):
-        doc["@timestamp"] = self.curent_interval_timestamp
+        doc["@timestamp"] = self.curent_interval_timestamp*1000
         query_string = json.dumps(doc)
         #current_day = "2018.08.18" strftime("%Y.%m.%d", gmtime())
         current_day = datetime.utcfromtimestamp(int(self.curent_interval_timestamp)).strftime('%Y.%m.%d')
